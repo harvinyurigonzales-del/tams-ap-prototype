@@ -14,7 +14,7 @@ describe('seeded figures (spec section 9)', () => {
 
   it('dashboard KPIs', () => {
     const k = dashboard(d)
-    expect(k.collections).toBe(22494)
+    expect(k.collections).toBe(25092)
     expect(k.outstanding).toBe(31694)
     expect(k.toVerify).toBe(1)
     expect(k.toVerifyAmount).toBe(2499)
@@ -22,15 +22,15 @@ describe('seeded figures (spec section 9)', () => {
   })
 
   it('status counts and weekly bookings', () => {
-    expect(statusCounts(d)).toEqual({ Pending: 2, Confirmed: 8, Completed: 2, Cancelled: 1 })
-    expect(bookingsPerWeek(d).map((w) => w.count)).toEqual([1, 0, 2, 4, 3, 3])
+    expect(statusCounts(d)).toEqual({ Pending: 2, Confirmed: 9, Completed: 2, Cancelled: 1 })
+    expect(bookingsPerWeek(d).map((w) => w.count)).toEqual([1, 0, 2, 4, 3, 4])
   })
 
   it('reports', () => {
     expect(bookingReport(d, OCT).value).toBe(106073)
     expect(revenueReport(d, SEP).collections).toBe(54483)
     const methods = Object.fromEntries(revenueReport(d, { from: '2026-01-01', to: '2026-12-31', label: '' }).byMethod.map((m) => [m.method, m.amount]))
-    expect(methods).toEqual({ GCash: 35790, 'Bank transfer': 30391, Maya: 10796 })
+    expect(methods).toEqual({ GCash: 38388, 'Bank transfer': 30391, Maya: 10796 })
     const perf = performanceReport(d, OCT)
     expect([perf.filled, perf.capacity]).toEqual([29, 108])
   })
@@ -92,11 +92,11 @@ describe('demo scripts', () => {
     expect(useAdmin.getState().assign({ kind: 'booking', id: 'BK-2026-0130' }, 'VAN-04', 'DRV-03').ok).toBe(true)
     const d = useAdmin.getState().data
     const k = dashboard(d)
-    expect(k.collections).toBe(24993)
+    expect(k.collections).toBe(27591)
     expect(k.outstanding).toBe(29195)
     expect(k.toVerify).toBe(0)
     expect(k.needsAssignment).toBe(1)
-    expect(statusCounts(d)).toMatchObject({ Pending: 1, Confirmed: 9 })
+    expect(statusCounts(d)).toMatchObject({ Pending: 1, Confirmed: 10 })
     const perf = performanceReport(d, OCT)
     expect(perf.filled).toBe(31)
     const bag17 = perf.rows.find((r) => r.departure.id === 'DEP-BAG-1017')!

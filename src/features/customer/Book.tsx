@@ -67,7 +67,7 @@ export function BookingForm() {
     return (
       <EmptyState
         title={avail.state === 'full' ? 'This departure is full' : 'Online booking for this date is closed'}
-        action={<LinkButton to={`/app/services/${service.id}/dates`}>Choose another date</LinkButton>}
+        action={<LinkButton to={`/app/tours/${service.id}/dates`}>Choose another date</LinkButton>}
       />
     )
   const promo = promoFor(dep, DEMO_TODAY)
@@ -96,7 +96,7 @@ export function BookingForm() {
 
   return (
     <div>
-      {step === 2 ? <BackLink to={`/app/services/${service.id}/dates?d=${dep.id}`} label="Choose date" /> : <BackLink label="Edit details" />}
+      {step === 2 ? <BackLink to={`/app/tours/${service.id}/dates?d=${dep.id}`} label="Choose date" /> : <BackLink label="Edit details" />}
       <Steps current={step} />
       <h1 className="font-display text-2xl font-bold text-brand-900">{step === 2 ? 'Booking details' : 'Review booking'}</h1>
       <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_360px]">
@@ -142,7 +142,7 @@ export function BookingForm() {
           </Card>
         ) : (
           <Card className="divide-y divide-line">
-            <ReviewBlock title="Trip" onChange={() => navigate(`/app/services/${service.id}/dates?d=${dep.id}`)}>
+            <ReviewBlock title="Trip" onChange={() => navigate(`/app/tours/${service.id}/dates?d=${dep.id}`)}>
               <p className="font-medium text-ink">{service.name}</p>
               <p>{fmtRange(dep.startDate, dep.endDate)}</p>
               <p>
@@ -202,7 +202,7 @@ export function ReviewBlock({ title, onChange, children }: { title: string; onCh
   )
 }
 
-export const bookingTitle = (b: Booking, s: Service) => (b.rental ? `${s.name} · ${b.rental.destination}` : s.name)
+export const bookingTitle = (b: Booking, s: Service) => b.label ?? (b.rental ? `${s.name} · ${b.rental.destination}` : s.name)
 
 export function BookingReceived() {
   const { bookingId } = useParams()

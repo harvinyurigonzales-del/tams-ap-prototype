@@ -13,6 +13,6 @@ test('navigation survives a patched window.scrollTo', async ({ page }) => {
   await page.getByRole('link', { name: /Customer demo/ }).click()
   await page.getByRole('link', { name: /October Getaways/ }).click()
   await expect(page.getByRole('heading', { name: 'Choose date' })).toBeVisible()
-  await page.getByRole('link', { name: 'Explore' }).first().click()
+  await page.getByRole('link', { name: 'Home', exact: true }).first().click()
   await expect(page.getByRole('heading', { name: 'Where to next?' })).toBeVisible()
 })

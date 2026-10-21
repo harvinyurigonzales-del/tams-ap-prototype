@@ -75,7 +75,15 @@ export function BookingPanel({ bookingId, onClose }: { bookingId: string; onClos
         <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
           <section>
             <h3 className="mb-1 text-xs font-semibold tracking-wide text-ink-3 uppercase">Trip</h3>
-            <p className="text-sm font-semibold text-ink">{s.name}</p>
+            <p className="text-sm font-semibold text-ink">{b.label ?? s.name}</p>
+            {b.requestId && (
+              <p className="text-sm text-ink-2">
+                From request{' '}
+                <Link to={`/admin/requests?id=${b.requestId}`} className="font-semibold text-brand-700 hover:underline">
+                  {b.requestId}
+                </Link>
+              </p>
+            )}
             <p className="text-sm text-ink-2">{fmtRange(b.startDate, b.endDate)}</p>
             <p className="text-sm text-ink-2">
               {b.rental ? `${b.rental.pickup} → ${b.rental.destination}, ${rentalDays(b.startDate, b.endDate)} days` : `Pickup ${fmtTime(s.pickupTime)}, ${s.pickup}`}
@@ -96,7 +104,7 @@ export function BookingPanel({ bookingId, onClose }: { bookingId: string; onClos
 
           <section>
             <h3 className="mb-1 text-xs font-semibold tracking-wide text-ink-3 uppercase">Amounts</h3>
-            <Row label={b.rental ? `${peso(b.unitPrice)} × ${rentalDays(b.startDate, b.endDate)} days` : `${peso(b.unitPrice)} × ${b.pax}${b.promoOff ? `, less ${peso(b.promoOff)} promo each` : ''}`}>{peso(b.total)}</Row>
+            <Row label={b.requestId ? `Accepted ${b.requestId.startsWith('VR-') ? 'quote' : 'proposal'}` : b.rental ? `${peso(b.unitPrice)} × ${rentalDays(b.startDate, b.endDate)} days` : `${peso(b.unitPrice)} × ${b.pax}${b.promoOff ? `, less ${peso(b.promoOff)} promo each` : ''}`}>{peso(b.total)}</Row>
             <Row label="Down payment (50%)">{peso(m.down)}</Row>
             <Row label="Paid (verified)">{peso(m.paid)}</Row>
             <Row label="Balance" strong>
