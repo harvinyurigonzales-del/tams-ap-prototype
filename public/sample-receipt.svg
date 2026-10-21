@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 480" font-family="Arial, Helvetica, sans-serif">
+  <rect width="300" height="480" rx="16" fill="#ffffff" stroke="#E4E1EE"/>
+  <rect width="300" height="88" rx="16" fill="#1D4ED8"/>
+  <rect y="70" width="300" height="18" fill="#1D4ED8"/>
+  <text x="150" y="40" text-anchor="middle" font-size="18" font-weight="700" fill="#fff">SAMPLE E-WALLET</text>
+  <text x="150" y="64" text-anchor="middle" font-size="12" fill="#E8EFFD">Fictional receipt · not a real transaction</text>
+  <text x="150" y="132" text-anchor="middle" font-size="13" fill="#5B5670">Sent to TAMS AP Travel (demo)</text>
+  <text x="150" y="176" text-anchor="middle" font-size="34" font-weight="700" fill="#1E1B2E">₱2,499.00</text>
+  <line x1="24" y1="208" x2="276" y2="208" stroke="#E4E1EE" stroke-dasharray="4 4"/>
+  <g font-size="13" fill="#5B5670">
+    <text x="24" y="240">Reference no.</text><text x="276" y="240" text-anchor="end" fill="#1E1B2E" font-weight="700">1009 8822 5531</text>
+    <text x="24" y="270">Date</text><text x="276" y="270" text-anchor="end" fill="#1E1B2E">Oct 8, 2026 9:32 AM</text>
+    <text x="24" y="300">From</text><text x="276" y="300" text-anchor="end" fill="#1E1B2E">0900 555 0101</text>
+    <text x="24" y="330">To</text><text x="276" y="330" text-anchor="end" fill="#1E1B2E">0900 555 0300</text>
+    <text x="24" y="360">Note</text><text x="276" y="360" text-anchor="end" fill="#1E1B2E">Down payment</text>
+  </g>
+  <rect x="24" y="392" width="252" height="56" rx="10" fill="#FFF1D6"/>
+  <text x="150" y="416" text-anchor="middle" font-size="12" font-weight="700" fill="#9A5B00">FOR DEMONSTRATION ONLY</text>
+  <text x="150" y="434" text-anchor="middle" font-size="11" fill="#9A5B00">No money was sent. Prototype sample.</text>
+</svg>

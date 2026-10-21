@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TAMS AP Booking (offline)</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #F7F6FB; color: #1E1B2E; font-family: system-ui, sans-serif; padding: 16px; }
+  .card { max-width: 380px; background: #fff; border: 1px solid #E4E1EE; border-radius: 20px; padding: 28px; text-align: center; }
+  .mark { width: 48px; height: 48px; border-radius: 12px; background: #5B3CC4; color: #fff; font-weight: 700; display: grid; place-items: center; margin: 0 auto 16px; }
+  h1 { font-size: 20px; margin: 0 0 8px; color: #261854; }
+  p { color: #5B5670; font-size: 14px; line-height: 1.5; }
+  button { margin-top: 12px; height: 44px; padding: 0 20px; border: 0; border-radius: 12px; background: #5B3CC4; color: #fff; font-weight: 600; font-size: 15px; cursor: pointer; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="mark">TA</div>
+    <h1>You are offline</h1>
+    <p>This page has not been saved for offline use yet. Open the prototype once while online, then it works without a connection.</p>
+    <button onclick="location.reload()">Retry</button>
+  </div>
+</body>
+</html>
