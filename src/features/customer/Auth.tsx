@@ -2,7 +2,7 @@ import { Eye, EyeOff, Lock, Mail, Phone, UserRound } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AuthCard } from '../../app/AuthCard'
-import { DEMO_CUSTOMER, useCustomer } from '../../state/customerStore'
+import { DEMO_CUSTOMER, NEW_CUSTOMER, useCustomer } from '../../state/customerStore'
 import { useUi } from '../../state/ui'
 import { Button } from '../../ui/Button'
 import { Dialog } from '../../ui/Dialog'
@@ -107,7 +107,21 @@ export function Login() {
         <Button variant="secondary" size="lg" full onClick={useDemo} disabled={busy}>
           Use demo account
         </Button>
-        <p className="text-center text-xs text-ink-3">Demo account: Maria Santos (fictional). Do not enter real details.</p>
+        <p className="text-center text-xs text-ink-3">
+          Demo account: Maria Santos (fictional). Do not enter real details.{' '}
+          <button
+            type="button"
+            disabled={busy}
+            className="font-semibold text-brand-700 underline"
+            onClick={() => {
+              setEmail(NEW_CUSTOMER.email)
+              setPassword(NEW_CUSTOMER.password)
+              submit(undefined, NEW_CUSTOMER)
+            }}
+          >
+            Use a new customer instead
+          </button>
+        </p>
       </form>
       <Dialog open={forgot} onClose={() => setForgot(false)} title="Password reset">
         Password reset is not available in the prototype. Use the demo account instead.

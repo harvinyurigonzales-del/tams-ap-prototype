@@ -122,7 +122,7 @@ export function assignableTargets(d: Dataset, today = DEMO_TODAY): (AssignTarget
   for (const b of d.bookings) {
     if (b.departureId || b.status !== 'Confirmed' || b.endDate < today) continue
     out.push({
-      kind: 'booking', id: b.id, from: b.startDate, to: b.endDate, pax: b.pax, label: `Van rental · ${b.contactName}`,
+      kind: 'booking', id: b.id, from: b.startDate, to: b.endDate, pax: b.pax, label: b.serviceId === 'SVC-CUSTOM' ? `${b.label ?? 'Custom trip'} · ${b.contactName}` : `Van rental · ${b.contactName}`,
       assignment: d.assignments.find((a) => a.target.kind === 'booking' && a.target.id === b.id),
     })
   }

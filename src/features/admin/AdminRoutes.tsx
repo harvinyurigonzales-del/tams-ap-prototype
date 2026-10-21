@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, CarFront, ClipboardList, CreditCard, LayoutDashboard, LogOut, Menu, MessageSquare, PieChart, Settings as SettingsIcon, UserRound, Users, X } from 'lucide-react'
+import { Bell, CalendarDays, CarFront, ClipboardList, CreditCard, Inbox, LayoutDashboard, LogOut, Menu, MessageSquare, PieChart, Settings as SettingsIcon, UserRound, Users, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { NotFound } from '../../app/NotFound'
@@ -18,6 +18,7 @@ import { AdminInquiries } from './Inquiries'
 import { AdminNotifications } from './Notifications'
 import { Payments } from './Payments'
 import { Reports } from './Reports'
+import { AdminRequests } from './Requests'
 import { Settings } from './Settings'
 
 export function AdminRoutes() {
@@ -38,6 +39,7 @@ export function AdminRoutes() {
           <Route path="dashboard" element={<Navigate to="/admin" replace />} />
           <Route path="bookings" element={<Bookings />} />
           <Route path="payments" element={<Payments />} />
+          <Route path="requests" element={<AdminRequests />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="customers" element={<Customers />} />
           <Route path="reports" element={<Reports />} />
@@ -67,6 +69,7 @@ const NAV = [
   { to: '/admin/calendar', label: 'Calendar', icon: CalendarDays },
   { to: '/admin/customers', label: 'Customers', icon: Users },
   { to: '/admin/payments', label: 'Payments', icon: CreditCard },
+  { to: '/admin/requests', label: 'Requests', icon: Inbox },
   { to: '/admin/reports', label: 'Reports', icon: PieChart },
   { to: '/admin/notifications', label: 'Notifications', icon: Bell },
   { to: '/admin/inquiries', label: 'Inquiries', icon: MessageSquare },

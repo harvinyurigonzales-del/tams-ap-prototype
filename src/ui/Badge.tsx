@@ -33,6 +33,14 @@ const STATUS_TONE: Record<string, Tone> = {
   Open: 'ok',
   Full: 'bad',
   Closed: 'neutral',
+  'Under review': 'info',
+  'Proposal ready': 'brand',
+  'Quote ready': 'brand',
+  Accepted: 'ok',
+  Expired: 'neutral',
+  'Awaiting staff': 'warn',
+  'Staff replied': 'brand',
+  Resolved: 'ok',
 }
 
 /** Customer-facing wording for payment verification states. */

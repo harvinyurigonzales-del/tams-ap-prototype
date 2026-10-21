@@ -26,7 +26,7 @@ export function AdminNotifications() {
         }
       />
       <div className="mb-4">
-        <Tabs value={f} onChange={setF} items={(['All', 'Unread', 'Bookings', 'Payments', 'Travel', 'Fleet'] as Filter[]).map((k) => ({ key: k, label: k }))} />
+        <Tabs value={f} onChange={setF} items={(['All', 'Unread', 'Bookings', 'Payments', 'Travel', 'Fleet', 'Requests'] as Filter[]).map((k) => ({ key: k, label: k }))} />
       </div>
       <Card className="px-4">
         {list.length === 0 ? <EmptyState icon={<Bell className="size-6" aria-hidden />} title="Nothing here" body="You are all caught up." /> : <ActivityList items={list} />}

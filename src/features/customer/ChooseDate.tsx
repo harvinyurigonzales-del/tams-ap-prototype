@@ -58,7 +58,7 @@ export function ChooseDate() {
 
   return (
     <div>
-      <BackLink to={`/app/services/${service.id}`} label={service.name} />
+      <BackLink to={`/app/tours/${service.id}`} label={service.name} />
       <Steps current={1} />
       <h1 className="font-display text-2xl font-bold text-brand-900">Choose date</h1>
       <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_360px]">

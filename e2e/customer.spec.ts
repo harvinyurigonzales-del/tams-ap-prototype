@@ -16,13 +16,15 @@ test('customer walkthrough C1–C10', async ({ page }) => {
   await expect(page.getByText('Oct 17 · 8 slots remaining')).toBeVisible()
   await expect(page.getByText('Oct 24 · 12 slots remaining')).toBeVisible()
 
-  await page.getByRole('link', { name: 'My trips' }).first().click()
-  await page.getByRole('tab', { name: /Past/ }).click()
-  await expect(page.getByText('Tagaytay Day Tour')).toBeVisible()
+  const nav = page.getByRole('navigation', { name: 'Main' }).last()
+  await nav.getByRole('link', { name: 'My Trips' }).click()
+  await expect(page.getByRole('heading', { name: 'Past' })).toBeVisible()
+  await expect(page.getByText('Tagaytay Day Tour').first()).toBeVisible()
 
   // In-app navigation only: a full page load would reset the in-memory demo.
-  await page.getByRole('link', { name: 'Explore' }).first().click()
-  await page.getByRole('link', { name: /^Baguio City \(photo/ }).click()
+  await nav.getByRole('link', { name: 'Explore' }).click()
+  await page.getByRole('link', { name: /Explore tours/ }).click()
+  await page.getByRole('link', { name: 'Baguio Weekend Escape' }).click()
   await page.getByRole('link', { name: 'View dates' }).click()
   await expect(page.getByRole('heading', { name: 'October 2026' })).toBeVisible()
   await page.getByRole('gridcell', { name: /Oct 10, 2026, Full/ }).click({ force: true })
@@ -54,8 +56,9 @@ test('customer walkthrough C1–C10', async ({ page }) => {
   await page.getByRole('link', { name: 'Back to trip' }).click()
   await expect(page.getByText('Awaiting verification').first()).toBeVisible()
 
-  await page.getByRole('link', { name: 'Explore' }).first().click()
-  await page.getByRole('link', { name: /^Baguio City \(photo/ }).click()
+  await nav.getByRole('link', { name: 'Explore' }).click()
+  await page.getByRole('link', { name: /Explore tours/ }).click()
+  await page.getByRole('link', { name: 'Baguio Weekend Escape' }).click()
   await page.getByRole('link', { name: 'View dates' }).click()
   await expect(page.getByRole('gridcell', { name: /Oct 17, 2026, 6 left/ })).toBeVisible()
   await page.screenshot({ path: 'test-results/customer-dates.png', fullPage: true })

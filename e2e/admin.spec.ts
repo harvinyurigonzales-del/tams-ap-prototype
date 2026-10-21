@@ -5,7 +5,7 @@ test('admin walkthrough A1–A13', async ({ page }) => {
   await expect(page.getByText('Please log in as staff to continue.')).toBeVisible()
   await page.getByRole('button', { name: 'Use demo account' }).click()
   await expect(page.getByRole('heading', { name: 'Welcome back, Admin!' })).toBeVisible()
-  await expect(page.getByText('₱22,494')).toBeVisible()
+  await expect(page.getByText('₱25,092')).toBeVisible()
   await expect(page.getByText('₱31,694')).toBeVisible()
   await page.screenshot({ path: 'test-results/admin-dashboard.png', fullPage: true })
 
@@ -42,7 +42,7 @@ test('admin walkthrough A1–A13', async ({ page }) => {
 
   await nav.getByRole('link', { name: 'Reports' }).click()
   await page.getByRole('tab', { name: 'Revenue' }).click()
-  await expect(page.getByText('₱24,993').first()).toBeVisible()
+  await expect(page.getByText('₱27,591').first()).toBeVisible()
   await page.getByRole('tab', { name: 'Bookings' }).click()
   await page.getByLabel('Service').selectOption('SVC-TAG')
   await expect(page.getByText('No records in this period')).toBeVisible()
@@ -54,4 +54,28 @@ test('admin walkthrough A1–A13', async ({ page }) => {
   await expect(page.getByText('Demo reset to the sample data.')).toBeVisible()
   await page.getByRole('link', { name: /Admin demo/ }).click()
   await expect(page.getByRole('heading', { name: 'Staff login' })).toBeVisible()
+})
+
+test('admin requests and inquiries (customer revision support)', async ({ page }) => {
+  await page.goto('/admin/login')
+  await page.getByRole('button', { name: 'Use demo account' }).click()
+  const nav = page.getByRole('navigation', { name: 'Admin' })
+  await nav.getByRole('link', { name: 'Requests' }).click()
+  await page.getByRole('button', { name: /CR-2026-0009/ }).click()
+  await expect(page.getByText('Prepared proposal (not sent)')).toBeVisible()
+  await page.getByRole('button', { name: 'Send proposal' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Send proposal' }).click()
+  await expect(page.getByText('Waiting for the customer to accept or ask for changes.')).toBeVisible()
+  await page.getByRole('tab', { name: /Van rental/ }).click()
+  await page.getByRole('button', { name: /VR-2026-0001/ }).click()
+  await expect(page.getByText(/Linked booking/)).toBeVisible()
+
+  await nav.getByRole('link', { name: 'Inquiries' }).click()
+  await page.getByRole('button', { name: /Senior-friendly pace/ }).click()
+  await page.getByRole('button', { name: 'Insert scripted reply' }).click()
+  await page.getByRole('button', { name: 'Record reply' }).click()
+  await expect(page.getByText('Staff replied').first()).toBeVisible()
+
+  await nav.getByRole('link', { name: 'Dashboard' }).click()
+  await expect(page.getByText('₱25,092')).toBeVisible()
 })

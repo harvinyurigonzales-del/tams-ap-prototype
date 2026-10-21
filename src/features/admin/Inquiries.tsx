@@ -1,9 +1,10 @@
 import { MessageSquare, Sparkles } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { fmtStamp } from '../../lib/format'
 import { useAdmin } from '../../state/adminStore'
 import { useUi } from '../../state/ui'
-import { Badge } from '../../ui/Badge'
+import { StatusBadge } from '../../ui/Badge'
 import { Button } from '../../ui/Button'
 import { Card } from '../../ui/Card'
 import { EmptyState } from '../../ui/EmptyState'
@@ -11,7 +12,7 @@ import { PageHeader } from './AdminRoutes'
 import { customerOf } from './common'
 
 export function AdminInquiries() {
-  const { data, replyInquiry } = useAdmin()
+  const { data, replyInquiry, resolveInquiry } = useAdmin()
   const toast = useUi((s) => s.toast)
   const [sel, setSel] = useState(data.inquiries[0]?.id ?? '')
   const [text, setText] = useState('')
@@ -31,9 +32,10 @@ export function AdminInquiries() {
                   <button onClick={() => { setSel(x.id); setText(''); setError('') }} className={`w-full px-4 py-3 text-left ${sel === x.id ? 'bg-brand-50' : 'hover:bg-surface-muted'}`}>
                     <span className="flex items-center justify-between gap-2">
                       <span className="text-sm font-semibold text-ink">{customerOf(data, x.customerId)?.name}</span>
-                      {last.from === 'customer' && <Badge tone="warn">New</Badge>}
+                      <StatusBadge status={x.status} />
                     </span>
                     <span className="block text-sm text-ink-2">{x.subject}</span>
+                    {x.relatedRef && <span className="block text-xs text-ink-3">About {x.relatedRef}</span>}
                     <span className="block truncate text-xs text-ink-3">{last.text}</span>
                   </button>
                 </li>
@@ -48,8 +50,27 @@ export function AdminInquiries() {
           ) : (
             <>
               <div className="border-b border-line px-5 py-3">
-                <p className="font-semibold text-ink">{q.subject}</p>
-                <p className="text-xs text-ink-2">{customerOf(data, q.customerId)?.name}</p>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-semibold text-ink">{q.subject}</p>
+                  <StatusBadge status={q.status} />
+                </div>
+                <p className="text-xs text-ink-2">
+                  {customerOf(data, q.customerId)?.name} · {q.id}
+                  {q.relatedRef && (
+                    <>
+                      {' · about '}
+                      {q.relatedRef.startsWith('BK-') ? (
+                        <Link to={`/admin/bookings?id=${q.relatedRef}`} className="font-semibold text-brand-700 hover:underline">
+                          {q.relatedRef}
+                        </Link>
+                      ) : (
+                        <Link to={`/admin/requests?id=${q.relatedRef}`} className="font-semibold text-brand-700 hover:underline">
+                          {q.relatedRef}
+                        </Link>
+                      )}
+                    </>
+                  )}
+                </p>
               </div>
               <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
                 {q.messages.map((m, i) => (
@@ -75,7 +96,23 @@ export function AdminInquiries() {
                   className="w-full rounded-xl border border-line px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
                 />
                 {error && <p className="mt-1 text-xs font-medium text-bad">{error}</p>}
-                <div className="mt-2 flex justify-end">
+                <div className="mt-2 flex flex-wrap justify-end gap-2">
+                  {q.sampleReply && q.status === 'Awaiting staff' && (
+                    <Button variant="secondary" onClick={() => setText(q.sampleReply!)}>
+                      Insert scripted reply
+                    </Button>
+                  )}
+                  {q.status !== 'Resolved' && (
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        const r = resolveInquiry(q.id)
+                        if (r.ok) toast('Inquiry marked as resolved.')
+                      }}
+                    >
+                      Mark resolved
+                    </Button>
+                  )}
                   <Button
                     onClick={() => {
                       const r = replyInquiry(q.id, text)
