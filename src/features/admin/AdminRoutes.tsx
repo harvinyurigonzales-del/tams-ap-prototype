@@ -83,7 +83,9 @@ function Shell() {
   const navigate = useNavigate()
   const { data, logout } = useAdmin()
   const unread = data.notifications.filter((n) => !n.read).length
-  useEffect(() => setDrawer(false), [pathname])
+  useEffect(() => {
+    setDrawer(false)
+  }, [pathname])
 
   const link = (n: (typeof NAV)[number]) => (
     <NavLink

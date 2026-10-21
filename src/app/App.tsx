@@ -9,7 +9,11 @@ import { Start } from './Start'
 
 export function App() {
   const { pathname } = useLocation()
-  useEffect(() => window.scrollTo(0, 0), [pathname])
+  // Block body on purpose: some browser extensions patch scrollTo to return a value, and React would then
+  // treat that value as a cleanup function and crash on the next navigation.
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
   return (
     <>
       <Routes>
