@@ -1,10 +1,8 @@
-import { Bell, ChevronRight, Heart, LogOut, MessageCircle, SlidersHorizontal, UserRound } from 'lucide-react'
+import { Bell, ChevronRight, Heart, LogOut, MessageCircle, SlidersHorizontal } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ResetDemoButton } from '../../app/ResetDemo'
 import { fmtDate, fmtStamp } from '../../lib/format'
-import { InstallButton } from '../../pwa/InstallHelp'
-import { NEW_CUSTOMER, useCustomer, useMe } from '../../state/customerStore'
+import { useCustomer, useMe } from '../../state/customerStore'
 import { useUi } from '../../state/ui'
 import { Button } from '../../ui/Button'
 import { Card, SectionTitle } from '../../ui/Card'
@@ -28,16 +26,21 @@ export function Account() {
     setErrors(e)
     if (e.name || e.mobile) return
     const r = updateProfile(f)
-    if (r.ok) toast('Profile saved for this demo session.')
+    if (r.ok) toast('Profile saved.')
   }
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
-      <h1 className="type-head text-[32px] text-charcoal md:text-[40px]">Account</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="type-head text-[32px] text-charcoal md:text-[40px]">Account</h1>
+        <Button variant="secondary" icon={<LogOut className="size-4" aria-hidden />} onClick={() => setOut(true)}>
+          Log out
+        </Button>
+      </div>
       <Card>
         <ul className="divide-y divide-line">
           {[
-            { to: '/app/preferences', icon: SlidersHorizontal, label: 'Travel preferences', sub: 'Shapes the suggestions on your home screen' },
+            { to: '/app/preferences', icon: SlidersHorizontal, label: 'Travel preferences', sub: 'Shapes the suggestions on your home page' },
             { to: '/app/saved', icon: Heart, label: 'Saved', sub: 'Tours and destinations you saved' },
             { to: '/app/messages', icon: MessageCircle, label: 'Messages', sub: 'Questions you sent to staff' },
             { to: '/app/notifications', icon: Bell, label: 'Notifications', sub: 'Updates on bookings and requests' },
@@ -59,8 +62,8 @@ export function Account() {
         <SectionTitle>Profile</SectionTitle>
         <div className="space-y-4">
           <TextField label="Full name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} error={errors.name} />
-          <TextField label="Mobile number" inputMode="tel" value={f.mobile} onChange={(e) => setF({ ...f, mobile: e.target.value })} error={errors.mobile} hint="Sample number" />
-          <TextField label="Email" value={me.email} disabled hint="Email cannot be changed in the demo." />
+          <TextField label="Mobile number" inputMode="tel" value={f.mobile} onChange={(e) => setF({ ...f, mobile: e.target.value })} error={errors.mobile} hint="Staff use this number about your trips." />
+          <TextField label="Email" value={me.email} disabled hint="To change your email, message our staff." />
           <p className="text-xs text-ink-3">
             Customer {me.id} · registered {fmtDate(me.registered)}
           </p>
@@ -69,28 +72,11 @@ export function Account() {
           </Button>
         </div>
       </Card>
-      <Card className="p-5">
-        <SectionTitle>This demo</SectionTitle>
-        <p className="mb-2 text-sm text-ink-2">Changes live only in this tab. Reloading the page or Reset Demo returns both demos to the sample data.</p>
-        <p className="mb-4 flex items-start gap-2 text-sm text-ink-2">
-          <UserRound className="mt-0.5 size-4 shrink-0" aria-hidden />
-          <span>
-            To see suggestions for someone with no history, log out and sign in as {NEW_CUSTOMER.email} with the password {NEW_CUSTOMER.password}.
-          </span>
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <InstallButton />
-          <ResetDemoButton />
-          <Button variant="ghost" icon={<LogOut className="size-4" aria-hidden />} onClick={() => setOut(true)}>
-            Log out
-          </Button>
-        </div>
-      </Card>
       <ConfirmDialog
         open={out}
         onClose={() => setOut(false)}
         title="Log out?"
-        body="Your trips stay in this demo session until you reset or reload."
+        body="You can log back in any time to see your trips."
         confirmLabel="Log out"
         onConfirm={() => {
           logout()
@@ -135,7 +121,7 @@ export function Notifications() {
           </ul>
         )}
       </Card>
-      <p className="mt-3 text-center text-xs text-ink-3">In-app only. The prototype sends no SMS, email or push messages.</p>
+      <p className="mt-3 text-center text-xs text-ink-3">Updates about your bookings, payments and requests appear here.</p>
     </div>
   )
 }

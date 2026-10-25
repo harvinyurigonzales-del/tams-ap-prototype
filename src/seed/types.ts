@@ -88,6 +88,8 @@ export interface Service {
   /** Tours belong to a destination; van rental and custom trips do not. */
   destinationId?: string
   interests?: Interest[]
+  /** Deactivated packages stay on past bookings but take no new departures. */
+  inactive?: boolean
 }
 
 export interface Departure {
@@ -149,6 +151,10 @@ export interface Block {
   to: string
   kind: 'maintenance' | 'unavailable' | 'leave'
   note: string
+  /** Maintenance record this block belongs to (admin maintenance schedule). */
+  ref?: string
+  /** Maintenance keeps the van out of service past its end date until staff confirm the work is done. */
+  untilDone?: boolean
 }
 
 /** Customer-facing rental category. Requests ask for a category; staff assign the actual van later. */
@@ -171,6 +177,8 @@ export interface Vehicle {
   plate: string
   seats: number
   blocks: Block[]
+  color?: string
+  odometer?: number
 }
 
 export interface Driver {
@@ -178,6 +186,9 @@ export interface Driver {
   name: string
   mobile: string
   blocks: Block[]
+  license?: string
+  licenseExpiry?: string
+  since?: string
 }
 
 export interface Assignment {
@@ -258,6 +269,12 @@ export interface Proposal {
   total: number
   validUntil: string
   sentAt: string
+  /** Note from staff shown with the proposal. */
+  note?: string
+  /** Days the proposal stays open once sent (default PROPOSAL_VALID_DAYS). */
+  validDays?: number
+  /** Staff set firm dates for a request with flexible or undecided dates. */
+  datesSet?: boolean
 }
 
 export type TripPace = 'Relaxed' | 'Balanced' | 'Packed'
@@ -276,7 +293,7 @@ export interface CustomRequest {
   pace?: TripPace
   startDate: string
   endDate: string
-  flexibility: 'Exact dates' | '± 3 days' | 'Any weekend this month'
+  flexibility: 'Exact dates' | '± 3 days' | 'Any weekend this month' | 'Flexible dates' | 'Dates to be decided'
   groupSize: number
   pickup: string
   /** Budget per person, in pesos. */
@@ -294,6 +311,38 @@ export interface CustomRequest {
   draftProposal?: Proposal
   bookingId?: string
   origin: Origin
+  /** Plan made with the AI planner demo, sent as the starting point for staff. */
+  plan?: PlannedTrip
+}
+
+/** A suggested itinerary from the AI planner demo, as the customer edited it. Staff confirm every part. */
+export interface PlannedTrip {
+  source: 'planner'
+  /** True when the customer has not fixed dates; startDate and endDate are then placeholders. */
+  datesTbd?: boolean
+  /** Roughly when, for flexible dates (e.g. "Sometime in December"). */
+  datesNote?: string
+  days: number
+  groupType: string
+  children: number
+  seniors: number
+  budgetBasis: 'person' | 'group' | 'help'
+  /** As the customer entered it, per person or for the group; absent when they asked us to estimate. */
+  budgetAmount?: number
+  pace: TripPace
+  interests: string[]
+  lodging: string
+  mustVisit?: string
+  accessibility?: string
+  dietary?: string
+  reasons: string[]
+  itinerary: { day: number; date?: string; label: string; items: { time?: string; title: string; kind: string; note?: string; review?: string }[] }[]
+  stops: { name: string; day: number; locked?: boolean; custom?: boolean }[]
+  estimate: { group: 'shared' | 'person' | 'optional' | 'quote'; label: string; amount?: number; detail?: string; unitPrice?: number; qty?: number; unit?: string }[]
+  total: number
+  perPerson: number
+  /** Conflicts the customer chose to leave for staff. */
+  issues: string[]
 }
 
 export type RentalTripType = 'One-way' | 'Round trip (same day)' | 'Multi-day'

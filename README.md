@@ -10,9 +10,10 @@ A clickable, frontend-only prototype of the booking management system for **TAMS
 | --- | --- | --- |
 | Customer | `maria.santos@example.com` | `Maria2026!` |
 | Customer with no history | `paolo.rivera@example.com` | `Paolo2026!` |
-| Admin | `admin@tamsap.example.com` | `Admin2026!` |
+| Admin (role: Admin) | `admin@tamsap.example.com` | `Admin2026!` |
+| Admin portal (role: Staff) | `staff@tamsap.example.com` | `Staff2026!` |
 
-Both login screens also have a **Use demo account** button. The customer login also has **Use a new customer instead** (Paolo), to show suggestions for someone with no trips, saved items or preferences.
+The customer login has a **Use sample account** button; the admin login has **Use admin account** and **Use staff account**. The customer login also has **Use a new customer instead** (Paolo), to show suggestions for someone with no trips, saved items or preferences.
 
 ## How the demo works
 
@@ -72,9 +73,9 @@ Home suggestions are **simple rules, not AI** (`src/domain/recommend.ts`, pure f
 - **Upcoming departures with open seats** and **Destinations to explore:** shown to everyone, including guests and Paolo.
 - Tours with no open departure are never offered as bookable. No card appears twice. **Not interested** hides a card for the session (with Undo). Changing **Travel preferences** changes the rows right away.
 
-### Ask TAMS (simulated assistant)
+### Ask TAMS (rules-based assistant)
 
-A floating assistant labelled **"Demo assistant · simulated responses"**. It is not an AI model and calls no external API: questions are matched by keywords to fixed topics and answers are built from the sample data (`src/domain/assistant.ts`).
+Developer note: Ask TAMS is not an AI model and calls no external API. Questions are matched by keywords to fixed topics and answers are built from the catalog data (`src/domain/assistant.ts`). Customer copy never describes this; the panel subtitle is "Quick answers about trips, prices and payments". Preset answers from **Manage chatbot** (`src/state/chatbot.ts`) are checked first. Every answer comes with 3–4 follow-up questions that never repeat the question just asked. For tests, `window.__TAMS_ASSIST_FAIL__ = true` makes the next answer fail so the Retry path can be checked.
 
 - Topics: tour prices, inclusions, pickup points, open dates and seats, promos, payment methods, down payment and balance, cancellation, what to bring, van rental, custom trips, destination info, and the status of the customer's own bookings and requests.
 - Ambiguous questions get a clarification (for example "How much?" or "San Juan"). Questions it cannot answer (pets, insurance, weather…) are never guessed; it offers to **Send to staff**.
@@ -82,17 +83,17 @@ A floating assistant labelled **"Demo assistant · simulated responses"**. It is
 - **Ask about this tour / booking / request** buttons open the assistant with that context.
 - Escalation: explanation → editable subject and question → optional related booking or request → **Send to staff** → `INQ-2026-####` with status **Awaiting staff**, listed in Messages. Statuses: Awaiting staff, Staff replied, Resolved. No staff are online and nothing is sent by email, SMS or live chat; the sample contact is `hello@tamsap.example.com`.
 
-### Demo controls (customer side)
+### Presenter mode (customer side)
 
-Clearly marked boxes that play the staff side so a walkthrough can continue without the admin demo:
+Customer screens contain no demo or prototype wording. Presenter shortcuts appear only in presenter mode: open any page with `?presenter=1` or tick the box on the start page (`/`). It lasts for the browser tab (`sessionStorage` key `tams-presenter`). The e2e fixtures switch it on. Shortcuts:
 
 - **Simulate staff review / Simulate staff proposal (quote)** on a custom or rental request.
 - **Show sample staff reply** in a message thread.
 
-### Reset, refresh and offline
+### Reset and refresh
 
 - **Reset demo** and reloading the page both clear everything: bookings, requests, messages, saved items, preferences, suggestions dismissed, assistant chat, drafts and checklist ticks. Nothing uses browser storage.
-- After the first online visit, all routes, the destination photos and the illustrations work offline (they are in the service worker precache). Data still lives only in memory.
+- It is a responsive website (RWD), not an installable app: no manifest, no offline mode. Layouts adapt from phone to desktop in the browser. An earlier version shipped a service worker; `public/sw.js` and a check in `src/main.tsx` remove it from browsers that still have it.
 
 ## Customer walkthrough
 
@@ -115,9 +116,18 @@ Clearly marked boxes that play the staff side so a walkthrough can continue with
   - `CR-2026-0004`, Closed.
   - `VR-2026-0005` Maria, Morong, Quote ready (₱14,000).
   - `VR-2026-0001` Joel, Baler, Accepted and linked to `BK-2026-0130` (the quote waived the driver allowance, ₱13,000). Only the booking counts in reports.
-- **Inquiries:** each shows its status. Prepared answers can be inserted with **Insert scripted reply**, then **Record reply** (status becomes Staff replied) and **Mark resolved**. `INQ-2026-0004` is Maria's escalated question about `CR-2026-0012`.
+- `CR-2026-0013` Angelica, La Union, sent from the **TAMS Trip Planner** with flexible dates. A first proposal was sent and the customer asked for changes. **Revise proposal** opens the proposal editor (dates, itinerary, price lines, inclusions, validity, note); saving sets firm dates, which flexible requests need before sending. The **Customer response** panel tracks Sent, Changes requested, Revising, Accepted and Expired.
+- **Inquiries:** each shows its status. Prepared answers can be inserted with **Insert suggested reply**, then **Record reply** (status becomes Staff replied) and **Mark resolved**. `INQ-2026-0004` is Maria's escalated question about `CR-2026-0012`.
 - Booking panels show **From request …** for bookings created from a proposal or quote.
-- The admin and customer demos still do not share data: accepting a proposal in the customer demo does not appear in the admin demo.
+- The admin and customer demos still do not share data: accepting a proposal in the customer demo does not appear in the admin demo. The one exception is chatbot preset answers, which are configuration shared by both sides in the same tab.
+
+### Admin roles
+
+- **Staff** see bookings, payments, calendar and assignment, customers, requests (including the proposal editor), inquiries, reviews, notifications and settings (Account; General is read-only). Vehicles, drivers and maintenance are view only.
+- **Admin** also see **Reports**, **Tour packages**, **Staff accounts** and **Manage chatbot**, can add, edit and remove vans and drivers, schedule, reschedule, cancel and confirm maintenance, and edit business details.
+- Admin-only pages are hidden from the staff menu; opening one by link shows an **Admin only** screen. Store actions check the role too. This is client-side only: real access control belongs on a server.
+- Maintenance that is past its end date stays **Overdue** and keeps the van out of service until an admin confirms it is done (seeded: Van 05).
+- The avatar in the header opens **Settings → Account** (profile and password).
 
 ## Images
 
@@ -139,13 +149,10 @@ npm run dev       # http://localhost:5173
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | Development server with hot reload |
-| `npm run build` | Type-check and build to `dist/` (includes the service worker) |
-| `npm run preview` | Serve the production build at http://localhost:4173 (use this to test offline/install) |
+| `npm run build` | Type-check and build to `dist/` |
+| `npm run preview` | Serve the production build at http://localhost:4173 |
 | `npm test` | Unit tests: seed figures, demo scripts, rental pricing, requests, suggestions, assistant, reset |
 | `npm run e2e` | Browser tests of the demo script (run `npm run build` first; needs Playwright's Chromium: `npx playwright install chromium`) |
-| `npm run icons` | Regenerate the PNG app icons from the placeholder monogram |
-
-The service worker only runs in the production build, so check offline mode and installation with `npm run build && npm run preview`.
 
 ## Deploy to Vercel
 
@@ -153,18 +160,11 @@ The service worker only runs in the production build, so check offline mode and 
 2. Import `tams-ap-prototype`. Vercel detects **Vite**: build command `npm run build`, output directory `dist`. No environment variables are needed.
 3. Click **Deploy**. Every push to `main` redeploys automatically.
 
-`vercel.json` adds the single-page-app rewrite and makes sure `sw.js` and the manifest are never cached stale.
-
-## Installing as an app (PWA)
-
-- **Chrome / Edge (desktop, Android):** use **Install app** on the start screen or the install icon in the address bar.
-- **Safari on iPhone/iPad:** Share → **Add to Home Screen** (the app shows these steps).
-- Some browsers do not support installing web apps; the prototype still works in a normal tab.
-- After the first online visit, the app works offline. When a new version is deployed, a banner offers **Reload** (which also resets the demo data).
+`vercel.json` adds the single-page-app rewrite and keeps `sw.js` (the clean-up worker) from being cached stale.
 
 ## Replacing placeholders
 
-- **Logo:** `src/ui/BrandMark.tsx` and the files in `public/icons/` (regenerate with `npm run icons` or replace directly). No official logo is used.
+- **Logo:** `src/ui/BrandMark.tsx` and the favicon files in `public/icons/`. No official logo is used.
 - **Colours:** the `@theme` block in `src/styles.css` (spec section 8).
 - **Photos:** destination and van images live in `public/images/` and are referenced from `src/seed/canonical.ts` (`image.kind` sets the Illustration / Representative photo label).
 - **Sample data:** `src/seed/canonical.ts`. If you change it, update the expected numbers in `src/__tests__/metrics.test.ts`.
@@ -181,7 +181,6 @@ src/
   seed/         canonical sample data and the two working copies
   state/        in-memory stores (customer, admin, assistant panel, toasts)
   ui/           buttons, fields, badges, dialogs, charts
-  pwa/          service worker registration and install help
 e2e/            Playwright demo-script tests
 ```
 

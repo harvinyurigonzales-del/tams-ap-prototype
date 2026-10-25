@@ -13,9 +13,6 @@ const html = (size, pad) =>
     : `<div style="width:${size}px;height:${size}px">${icon.replace('<svg ', '<svg style="width:100%;height:100%;display:block" ')}</div>`
 
 const targets = [
-  ['public/icons/icon-192.png', 192, false],
-  ['public/icons/icon-512.png', 512, false],
-  ['public/icons/maskable-512.png', 512, true],
   ['public/icons/apple-touch-icon.png', 180, true],
 ]
 

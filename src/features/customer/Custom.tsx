@@ -20,6 +20,7 @@ import { SampleFill } from '../../ui/SampleFill'
 import { BackLink } from './Explore'
 import { AskAboutButton, DecisionActions, LinkedBooking, PriceLines, RequestStatusBadge, requestTimeline, SimulateStaff, WithdrawButton } from './Requests'
 import { Timeline } from './Timeline'
+import { plannedBudget, plannedDates, PlannedTripView } from './planner/PlannedTripView'
 
 const FLEX: CustomRequest['flexibility'][] = ['Exact dates', '± 3 days', 'Any weekend this month']
 const PACES: { value: TripPace; note: string }[] = [
@@ -106,7 +107,7 @@ export function CustomRequestForm() {
   const days = f.startDate && f.endDate >= f.startDate ? daysBetween(f.startDate, f.endDate) + 1 : 0
   const stops = planStops(f)
   const guide =
-    hasPlace && days > 0 && f.groupSize > 0 && f.groupSize <= MAX_GROUP ? draftCustomProposal({ ...f, stops, pickup: f.pickup || 'your pickup point' }, place, DEMO_NOW) : undefined
+    hasPlace && days > 0 && f.groupSize > 0 && f.groupSize <= MAX_GROUP ? draftCustomProposal({ ...f, plan: undefined, stops, pickup: f.pickup || 'your pickup point' }, place, DEMO_NOW) : undefined
 
   const dirty =
     !!f.pickupCity || !!f.pickupLandmark || !!f.requests || f.interests.length > 0 || f.plan.some((s) => s.own) || (f.destinationName ?? '') !== '' || f.groupSize !== 4 ||
@@ -286,7 +287,7 @@ export function CustomRequestForm() {
             <TextArea label="Special requests (optional)" maxLength={400} value={f.requests} onChange={(e) => upd({ requests: e.target.value })} placeholder="Seniors or children in the group, dietary needs, anything staff should know" />
             <div className="grid gap-4 sm:grid-cols-2">
               <TextField label="Contact person" autoComplete="name" value={f.contactName} onChange={(e) => upd({ contactName: e.target.value })} error={errors.contactName} />
-              <TextField label="Contact mobile" type="tel" autoComplete="tel" inputMode="tel" value={f.contactMobile} onChange={(e) => upd({ contactMobile: e.target.value })} error={errors.contactMobile} hint="Sample number. No messages are sent." />
+              <TextField label="Contact mobile" type="tel" autoComplete="tel" inputMode="tel" value={f.contactMobile} onChange={(e) => upd({ contactMobile: e.target.value })} error={errors.contactMobile} hint="Staff use this number about your request." />
             </div>
             <Button size="lg" full onClick={submit}>
               {me ? 'Send request' : 'Log in to send request'}
@@ -595,16 +596,16 @@ export function CustomRequestDetails() {
             </div>
             <div className="mt-4 space-y-1 text-sm text-ink-2">
               <p className="flex items-center gap-2">
-                <CalendarDays className="size-4" aria-hidden /> {fmtRange(r.startDate, r.endDate)} · {r.flexibility}
+                <CalendarDays className="size-4" aria-hidden /> {plannedDates(r.plan) ?? `${fmtRange(r.startDate, r.endDate)} · ${r.flexibility}`}
               </p>
               <p className="flex items-center gap-2">
-                <Users className="size-4" aria-hidden /> {r.groupSize} people · budget {peso(r.budgetMin)}–{peso(r.budgetMax)} per person
+                <Users className="size-4" aria-hidden /> {r.groupSize} people · budget {r.plan ? plannedBudget(r.plan) : `${peso(r.budgetMin)}–${peso(r.budgetMax)} per person`}
               </p>
               <p className="flex items-center gap-2">
                 <MapPin className="size-4" aria-hidden /> Pickup: {r.pickup}
               </p>
               {r.interests.length > 0 && <p>Interests: {r.interests.join(', ')}</p>}
-              {r.stops && r.stops.length > 0 && (
+              {!r.plan && r.stops && r.stops.length > 0 && (
                 <p>
                   Stops ({r.planMode === 'scratch' ? 'built from scratch' : 'from the suggested trip'}, {(r.pace ?? 'Balanced').toLowerCase()} pace): {r.stops.join(' → ')}
                 </p>
@@ -616,6 +617,14 @@ export function CustomRequestDetails() {
               </p>
             </div>
           </Card>
+
+          {r.plan && (
+            <Card className="p-5">
+              <h2 className="type-head text-[22px] text-charcoal">Your planned trip</h2>
+              <p className="mt-1 mb-4 text-sm text-ink-2">The plan you sent. Staff use it as the starting point for your proposal.</p>
+              <PlannedTripView plan={r.plan} />
+            </Card>
+          )}
 
           {p && (r.status === 'Proposal ready' || r.status === 'Accepted') && (
             <Card className="p-5">

@@ -1,4 +1,8 @@
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { X } from 'lucide-react'
+import { Button } from '../../ui/Button'
+import { Card } from '../../ui/Card'
+import { Dialog } from '../../ui/Dialog'
 import { Link } from 'react-router-dom'
 import { fmtStamp } from '../../lib/format'
 import type { AppNotification, Dataset } from '../../seed/types'
@@ -134,3 +138,71 @@ export function paginate<T>(rows: T[], page: number, size = 8) {
   const p = Math.min(page, pages)
   return { rows: rows.slice((p - 1) * size, p * size), page: p, pages, from: rows.length ? (p - 1) * size + 1 : 0, to: Math.min(p * size, rows.length), total: rows.length }
 }
+
+/** Add or edit form in a dialog. onSave returns an error to keep the dialog open, or nothing to close it. */
+export function FormDialog({ open, onClose, title, saveLabel = 'Save', onSave, children, wide }: { open: boolean; onClose: () => void; title: string; saveLabel?: string; onSave: () => string | void; children: ReactNode; wide?: boolean }) {
+  const [error, setError] = useState('')
+  useEffect(() => {
+    if (open) setError('')
+  }, [open])
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={title}
+      wide={wide}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              const err = onSave()
+              if (err) setError(err)
+              else onClose()
+            }}
+          >
+            {saveLabel}
+          </Button>
+        </>
+      }
+    >
+      <form
+        className="space-y-4"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault()
+        }}
+      >
+        {children}
+        {error && (
+          <p role="alert" className="rounded-lg bg-bad-bg px-3 py-2 text-sm font-medium text-bad">
+            {error}
+          </p>
+        )}
+      </form>
+    </Dialog>
+  )
+}
+
+/** Side card that shows one record's details next to a list. */
+export function DetailCard({ title, subtitle, onClose, children, label }: { title: ReactNode; subtitle?: ReactNode; onClose: () => void; children: ReactNode; label: string }) {
+  return (
+    <Card className="h-fit p-5" role="complementary" aria-label={label}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="font-display text-lg font-semibold text-ink">{title}</h2>
+          {subtitle && <p className="text-sm text-ink-2">{subtitle}</p>}
+        </div>
+        <button onClick={onClose} className="-mr-1 rounded-lg p-1 text-ink-2 hover:bg-surface-muted" aria-label="Close details">
+          <X className="size-5" />
+        </button>
+      </div>
+      <div className="mt-4">{children}</div>
+    </Card>
+  )
+}
+
+/** Splits a textarea into lines. */
+export const linesOf = (s: string) => s.split('\n').map((l) => l.trim()).filter(Boolean)

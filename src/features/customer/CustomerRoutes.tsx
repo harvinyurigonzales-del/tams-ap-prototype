@@ -19,6 +19,7 @@ import { ReviewsPage } from './Reviews'
 import { Saved } from './Saved'
 import { TourDetails } from './Tours'
 import { PhotoCredits } from './Credits'
+import { Planner } from './planner/Planner'
 import { TripDetails, Trips } from './Trips'
 
 export function CustomerRoutes() {
@@ -38,7 +39,8 @@ export function CustomerRoutes() {
         <Route path="destinations/:destinationId" element={<DestinationDetails />} />
         <Route path="rental" element={<RentalLanding />} />
         <Route path="rental/request" element={<RentalRequestForm />} />
-        <Route path="custom/new" element={<CustomRequestForm />} />
+        <Route path="custom/new" element={<Planner />} />
+        <Route path="custom/form" element={<CustomRequestForm />} />
         <Route path="reviews" element={<ReviewsPage />} />
         <Route path="credits" element={<PhotoCredits />} />
 

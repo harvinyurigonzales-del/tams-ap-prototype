@@ -6,7 +6,7 @@ const nav = (page: Page) => page.getByRole('navigation', { name: 'Main' }).last(
 
 async function loginAsMaria(page: Page) {
   await page.goto('/app/login')
-  await page.getByRole('button', { name: 'Use demo account' }).click()
+  await page.getByRole('button', { name: 'Use sample account' }).click()
   await expect(page.getByText('Hello, Maria')).toBeVisible()
 }
 
@@ -19,6 +19,9 @@ test('guest plans a custom trip from a destination, logs in, and tracks it to a 
   await page.getByRole('link', { name: 'Sagada', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Sagada', level: 1 })).toBeVisible()
   await page.getByRole('link', { name: /Plan a custom trip here/ }).click()
+  // The trip planner opens first; the regular form is one link away.
+  await expect(page.getByRole('heading', { name: 'Anong alis ang nasa isip mo?' })).toBeVisible()
+  await page.getByRole('link', { name: 'Prefer to fill out the details yourself?' }).click()
   await expect(page.getByRole('combobox', { name: 'Destination' })).toHaveValue('Sagada')
   await expect(page.getByRole('checkbox', { name: 'Kiltepan sunrise' })).toBeChecked()
   await page.getByRole('combobox', { name: 'Pickup city' }).fill('Malol')
@@ -32,7 +35,7 @@ test('guest plans a custom trip from a destination, logs in, and tracks it to a 
   await page.getByLabel('Contact person').fill('Maria Santos')
   await page.getByLabel('Contact mobile').fill('0900 555 0101')
   await page.getByRole('button', { name: 'Log in to send request' }).click()
-  await page.getByRole('button', { name: 'Use demo account' }).click()
+  await page.getByRole('button', { name: 'Use sample account' }).click()
   // Back on the form with the answers kept.
   await expect(page.getByRole('combobox', { name: 'Pickup landmark' })).toHaveValue('Barasoain Church')
   await expect(page.getByRole('checkbox', { name: /Sagada Pottery/ })).toBeChecked()
@@ -95,7 +98,7 @@ test('Ask TAMS answers, escalates to staff, and the sample reply arrives in Mess
   await loginAsMaria(page)
   await page.getByRole('button', { name: 'Ask TAMS' }).click()
   const panel = page.getByRole('dialog', { name: 'Ask TAMS assistant' })
-  await expect(panel.getByText('Demo assistant · simulated responses')).toBeVisible()
+  await expect(panel.getByText('Quick answers about trips, prices and payments')).toBeVisible()
   await panel.getByLabel('Your question').fill('How much is the Baguio tour?')
   await panel.getByRole('button', { name: 'Send question' }).click()
   await expect(panel.getByText(/₱2,499 per person/)).toBeVisible()
@@ -110,7 +113,7 @@ test('Ask TAMS answers, escalates to staff, and the sample reply arrives in Mess
   await panel.getByRole('link', { name: 'Open in Messages' }).click()
   await expect(page.getByRole('heading', { name: 'Pet on the Tagaytay trip' })).toBeVisible()
   await expect(page.getByText('Awaiting staff').first()).toBeVisible()
-  await page.getByRole('button', { name: 'Show sample staff reply' }).click()
+  await page.getByRole('button', { name: 'Show staff reply' }).click()
   await expect(page.getByText('Staff replied').first()).toBeVisible()
   await expect(page.getByText('TAMS AP staff')).toBeVisible()
 })
@@ -118,7 +121,7 @@ test('Ask TAMS answers, escalates to staff, and the sample reply arrives in Mess
 test('saved items stay consistent, and guests are asked to log in to save', async ({ page }) => {
   await page.goto('/app/tours/SVC-TAG')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
-  await page.getByRole('button', { name: 'Use demo account' }).click()
+  await page.getByRole('button', { name: 'Use sample account' }).click()
   await expect(page.getByRole('heading', { name: 'Tagaytay Day Tour' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Saved', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await page.getByRole('link', { name: 'Saved' }).first().click()

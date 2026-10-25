@@ -2,12 +2,24 @@ import { expect, test } from './fixtures'
 
 // Second revision round: hero slideshow, looping carousels, floating assistant, sign-in page and demo helpers.
 
-test('hero slideshow has working controls and keeps the search in place', async ({ page }) => {
+test('hero slideshow cycles on its own, pauses on interaction and keeps the search in place', async ({ page }) => {
   await page.goto('/app')
   const controls = page.getByRole('group', { name: 'Slideshow controls' })
   await expect(controls.getByText('1/10')).toBeVisible()
-  await controls.getByRole('button', { name: 'Pause slideshow' }).click()
-  await expect(controls.getByRole('button', { name: 'Play slideshow' })).toHaveAttribute('aria-pressed', 'true')
+  // No visible pause button; it advances by itself about every 3 seconds.
+  await expect(page.getByRole('button', { name: /Pause slideshow|Play slideshow/ })).toHaveCount(0)
+  await expect(controls.getByText('2/10')).toBeVisible({ timeout: 8000 })
+  // Pointer on the controls holds the current photo.
+  await controls.hover()
+  const held = await controls.locator('span[aria-label^="Photo"]').textContent()
+  await page.waitForTimeout(3600)
+  await expect(controls.locator('span[aria-label^="Photo"]')).toHaveText(held!)
+  await controls.getByRole('button', { name: 'Previous photo' }).click()
+  await controls.getByRole('button', { name: 'Previous photo' }).click()
+  await controls.getByRole('button', { name: 'Next photo' }).click()
+  await controls.getByRole('button', { name: 'Next photo' }).click()
+  await expect(controls.locator('span[aria-label^="Photo"]')).toHaveText(held!)
+  await page.goto('/app')
   await controls.getByRole('button', { name: 'Next photo' }).click()
   await expect(controls.getByText('2/10')).toBeVisible()
   await controls.getByRole('button', { name: 'Previous photo' }).click()
@@ -54,12 +66,12 @@ test('floating Ask TAMS launcher opens the chat above it and keeps the conversat
 test('sign-in page: Google is honest without a client ID, demo is separate, and booking context returns', async ({ page }) => {
   await page.goto('/app/login?next=%2Fapp%2Fexplore')
   await page.getByRole('button', { name: 'Continue with Google' }).click()
-  await expect(page.getByRole('dialog', { name: /Google sign-in isn.t connected yet/ })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: /Google sign-in isn.t available yet/ })).toBeVisible()
   await page.getByRole('button', { name: 'Close' }).click()
   await page.getByLabel('Password', { exact: true }).fill('x')
   await page.getByRole('button', { name: /show password/i }).click()
   await expect(page.getByLabel('Password', { exact: true })).toHaveAttribute('type', 'text')
-  await page.getByRole('button', { name: 'Use demo account' }).click()
+  await page.getByRole('button', { name: 'Use sample account' }).click()
   await expect(page).toHaveURL(/\/app\/explore/)
 })
 
@@ -78,7 +90,7 @@ test('sample data fills on request, asks before replacing, and never submits', a
 })
 
 test('custom trip can be built from scratch with a place outside the catalog', async ({ page }) => {
-  await page.goto('/app/custom/new')
+  await page.goto('/app/custom/form')
   await page.getByRole('combobox', { name: 'Destination' }).fill('Daet, Camarines Norte')
   await expect(page.getByText('Not in our list yet. Staff check whether we can take you there.')).toBeVisible()
   await page.getByLabel('Build from scratch').check()

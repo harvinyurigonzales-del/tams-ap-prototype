@@ -2,11 +2,11 @@ import { ArrowRight, Clock, LayoutDashboard, Smartphone } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { fmtDate } from '../lib/format'
 import { CLOCK_SOURCE, DEMO_TODAY } from '../lib/demoClock'
-import { InstallButton } from '../pwa/InstallHelp'
 import { BrandMark } from '../ui/BrandMark'
+import { usePresenter } from '../state/presenter'
 import { ResetDemoButton, useResetOnArrival } from './ResetDemo'
 
-/** Presenter hub: two demos that do not share data, plus Reset and Install. */
+/** Presenter hub: two demos that do not share data, plus Reset. */
 export function Start() {
   useResetOnArrival()
   return (
@@ -48,9 +48,10 @@ export function Start() {
           system both would use one database.
         </p>
 
+        <PresenterSwitch />
+
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <ResetDemoButton />
-          <InstallButton />
         </div>
 
         <p className="mt-10 text-xs text-ink-3">
@@ -77,5 +78,19 @@ function DemoCard({ to, icon, title, body, step }: { to: string; icon: React.Rea
         Open <ArrowRight className="size-4 transition group-hover:translate-x-0.5" aria-hidden />
       </span>
     </Link>
+  )
+}
+
+/** Presenter shortcuts stay off customer screens unless switched on here. */
+function PresenterSwitch() {
+  const { on, set } = usePresenter()
+  return (
+    <label className="mt-4 flex max-w-2xl cursor-pointer items-start gap-3 rounded-2xl border border-line bg-surface px-4 py-3 text-sm">
+      <input type="checkbox" checked={on} onChange={(e) => set(e.target.checked)} className="mt-0.5 size-4 accent-brand-600" />
+      <span>
+        <span className="block font-semibold text-ink">Show presenter shortcuts in the customer app</span>
+        <span className="text-ink-2">Adds buttons that play the staff side forward on requests and show prepared staff replies in Messages. The customer app never shows demo notes otherwise.</span>
+      </span>
+    </label>
   )
 }

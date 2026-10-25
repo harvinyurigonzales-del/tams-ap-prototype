@@ -8,7 +8,6 @@ import { DEMO_TODAY } from '../../lib/demoClock'
 import { fmtDate, fmtTime, peso } from '../../lib/format'
 import { useAssistant } from '../../state/assistant'
 import { useCustomer } from '../../state/customerStore'
-import { SampleTag } from '../../ui/Badge'
 import { Button, LinkButton } from '../../ui/Button'
 import { EmptyState } from '../../ui/EmptyState'
 import { Picture } from '../../ui/Picture'
@@ -199,10 +198,6 @@ export function TourDetails() {
               <Condition title={`Online booking closes ${BOOKING_CUTOFF_DAYS} days before`}>After that, message us and staff will check if a seat can still be added.</Condition>
               <Condition title="Cancellations">Request a cancellation from My Trips any time before the travel date. Staff review each request and contact you.</Condition>
             </ul>
-            <p className="mt-3 text-xs text-ink-3">
-              Payment rules shown here are the prototype’s sample policy.
-              <SampleTag />
-            </p>
           </section>
         </div>
 

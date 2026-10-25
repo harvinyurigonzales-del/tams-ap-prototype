@@ -61,7 +61,7 @@ export function SalesOutlook() {
       </div>
 
       <p className="mt-3 text-xs text-ink-3">
-        A planning guide, not a promise. The shaded ranges widen each month because the further ahead, the less certain. Built from the prototype’s sample sales.
+        A planning guide, not a promise. The shaded ranges widen each month because the further ahead, the less certain. Built from past monthly sales.
       </p>
 
       <details className="mt-3 group">

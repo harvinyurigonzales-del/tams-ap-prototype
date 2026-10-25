@@ -8,7 +8,7 @@ export function NotFound({ home = '/', homeLabel = 'Back to start' }: { home?: s
       <EmptyState
         icon={<Compass className="size-6" aria-hidden />}
         title="Page not found"
-        body="This page does not exist in the prototype."
+        body="We couldn’t find this page."
         action={<LinkButton to={home}>{homeLabel}</LinkButton>}
       />
     </div>

@@ -7,6 +7,8 @@ export const test = base.extend({
   page: async ({ page }, use) => {
     await page.addInitScript(() => {
       ;(window as unknown as { __TAMS_TODAY__: string }).__TAMS_TODAY__ = '2026-10-08'
+      // Journeys use the presenter shortcuts to play the staff side forward.
+      sessionStorage.setItem('tams-presenter', '1')
     })
     await use(page)
   },

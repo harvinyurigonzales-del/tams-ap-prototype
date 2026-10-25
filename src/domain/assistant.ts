@@ -5,17 +5,41 @@ import { bookableDeparture, catalogTours, fromPrice } from './recommend'
 import { requestDestination, requestStatusLabel } from './requests'
 import { BALANCE_DUE_DAYS_BEFORE, BOOKING_CUTOFF_DAYS, DOWN_PAYMENT_RATE, departureAvailability, money } from './rules'
 
-// "Ask TAMS" demo assistant. It is not an AI model: questions are matched to a fixed list of intents by
-// keywords, and every answer is assembled from the sample data and the sample policies in rules.ts.
-// Anything outside those intents is offered to staff instead of guessed.
+// Ask TAMS. Developer note: questions are matched to a fixed list of intents by keywords, and every answer is
+// assembled from the catalog data and the policies in rules.ts. Anything outside those intents is offered to
+// staff instead of guessed. This note is for developers only; customer copy never describes how it works.
 
-export const ASSISTANT_DISCLOSURE = 'Demo assistant · simulated responses'
+export const ASSISTANT_DISCLOSURE = 'Quick answers about trips, prices and payments'
 export const STAFF_EMAIL = 'hello@tamsap.example.com'
 
 export type Intent =
   | 'greeting' | 'human' | 'personal' | 'cancellation' | 'what_to_bring' | 'payment_methods' | 'down_payment' | 'pickup'
   | 'inclusions' | 'custom_trip' | 'van_rental' | 'promo' | 'availability' | 'price' | 'recommend' | 'destination'
-  | 'clarify' | 'login_needed' | 'unknown'
+  | 'clarify' | 'login_needed' | 'unknown' | 'upload_receipt' | 'verification' | 'custom_price' | 'proposal_time' | 'preset'
+
+/** An answer an admin wrote in Manage chatbot, used when a question contains one of its trigger phrases. */
+export interface ChatPreset {
+  id: string
+  title: string
+  keywords: string[]
+  answer: string
+  link?: AssistantLink
+  active: boolean
+}
+
+/** The active preset whose phrase appears in the question, preferring the longest (most specific) phrase. */
+export function matchPreset(presets: ChatPreset[], question: string): ChatPreset | undefined {
+  const q = ` ${question.toLowerCase().replace(/[’']/g, "'").replace(/[^a-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim()} `
+  let best: { p: ChatPreset; len: number } | undefined
+  for (const p of presets) {
+    if (!p.active) continue
+    for (const k of p.keywords) {
+      const kw = k.toLowerCase().trim()
+      if (kw && q.includes(` ${kw} `.replace(/\s+/g, ' ')) && (!best || kw.length > best.len)) best = { p, len: kw.length }
+    }
+  }
+  return best?.p
+}
 
 export interface AssistantContext {
   kind: 'tour' | 'destination' | 'booking' | 'custom' | 'rental'
@@ -35,6 +59,8 @@ export interface AssistantAnswer {
   options?: string[]
   /** Offer to send the question to staff. */
   escalate?: boolean
+  /** The tour or destination this answer was about, so a follow-up like "What's included?" knows what "it" is. */
+  about?: AssistantContext
 }
 
 const has = (q: string, ...words: string[]) => words.some((w) => q.includes(w))
@@ -101,7 +127,7 @@ export function answerQuestion(d: Dataset, { question, customerId, context }: As
   if (has(q, 'staff', 'human', 'agent', 'real person', 'talk to someone', 'customer service')) {
     return {
       intent: 'human',
-      text: 'I can pass your question to our staff. They reply in Messages, usually within one business day. Nothing is sent by email or SMS in this demo.',
+      text: 'I can pass your question to our staff. They reply in Messages, usually within one business day.',
       escalate: true,
     }
   }
@@ -115,12 +141,28 @@ export function answerQuestion(d: Dataset, { question, customerId, context }: As
     }
   }
 
+  if (has(q, 'upload', 'receipt', 'proof of payment', 'screenshot')) {
+    return {
+      intent: 'upload_receipt',
+      text: 'Open your booking in My Trips and choose Pay. Pick GCash, Maya or bank transfer, enter the reference number from your payment, and add a photo or screenshot of the receipt. Staff then verify it.',
+      links: customerId ? [{ label: 'Open My Trips', to: '/app/trips' }] : [{ label: 'Log in to see your trips', to: '/app/login?next=/app/trips' }],
+    }
+  }
+
+  if (has(q, 'verified', 'verify', 'verification', 'confirm my payment', 'payment confirmed', 'approved')) {
+    return {
+      intent: 'verification',
+      text: 'Staff check each payment against its reference number and receipt. Until then it shows as “Awaiting verification” on your booking. Once it’s verified you get a notification and the booking updates. If something doesn’t match, staff message you in Messages.',
+      links: customerId ? [{ label: 'Open My Trips', to: '/app/trips' }] : undefined,
+    }
+  }
+
   if (personal && !has(q, 'cancel', 'to bring', 'pack')) return personalAnswer(d, customerId, ref, context, today)
 
   if (has(q, 'cancel', 'refund')) {
     return {
       intent: 'cancellation',
-      text: `You can request a cancellation for a pending or confirmed booking any time before the travel date, from the booking page in My Trips. Staff review each request and contact you; refunds are handled outside this prototype. Custom-trip and van-rental requests can be withdrawn until you accept them.`,
+      text: `You can request a cancellation for a pending or confirmed booking any time before the travel date, from the booking page in My Trips. Staff review each request and contact you about any refund. Custom-trip and van-rental requests can be withdrawn until you accept them.`,
       links: customerId ? [{ label: 'Open My Trips', to: '/app/trips' }] : [{ label: 'Log in to see your trips', to: '/app/login?next=/app/trips' }],
     }
   }
@@ -137,14 +179,14 @@ export function answerQuestion(d: Dataset, { question, customerId, context }: As
   if (has(q, 'gcash', 'maya', 'bank', 'payment method', 'how do i pay', 'how to pay', 'pay with', 'mode of payment')) {
     return {
       intent: 'payment_methods',
-      text: 'You can pay by GCash, Maya or bank transfer, then upload your receipt in the app. Staff verify each payment before your booking is confirmed. This demo shows sample account details only; no real payment is made.',
+      text: 'You can pay by GCash, Maya or bank transfer, then upload your receipt in the app. Staff verify each payment before your booking is confirmed.',
     }
   }
 
   if (has(q, 'down payment', 'downpayment', 'deposit', 'balance due', 'reservation fee', '50%', 'installment')) {
     return {
       intent: 'down_payment',
-      text: `A ${DOWN_PAYMENT_RATE * 100}% down payment holds your booking. The balance is due ${BALANCE_DUE_DAYS_BEFORE} days before travel. For custom trips and van rentals, you pay only after you accept the proposal or quote. (Sample policy.)`,
+      text: `A ${DOWN_PAYMENT_RATE * 100}% down payment holds your booking. The balance is due ${BALANCE_DUE_DAYS_BEFORE} days before travel. For custom trips and van rentals, you pay only after you accept the proposal or quote.`,
     }
   }
 
@@ -174,10 +216,32 @@ export function answerQuestion(d: Dataset, { question, customerId, context }: As
   }
 
   if (has(q, 'custom', 'private trip', 'private tour', 'own itinerary', 'tailor', 'personalized trip', 'family trip')) {
+    if (has(q, 'price', 'cost', 'how much', 'magkano')) {
+      return {
+        intent: 'custom_price',
+        text: 'Custom trips are priced for your group: a private van with driver per day, hotel rooms per night, and guide and entrance fees per person. The trip planner shows an estimate as you plan, and staff send the final quotation in your proposal.',
+        links: [{ label: 'Plan a custom trip', to: dest ? `/app/custom/new?destination=${dest.id}` : '/app/custom/new' }],
+      }
+    }
+    if (has(q, ' pay', 'free', 'charge')) {
+      return {
+        intent: 'custom_trip',
+        text: 'No. Sending a custom-trip request is free and nothing is reserved. You pay a down payment only after you accept the proposal staff send you.',
+        links: [{ label: 'Plan a custom trip', to: '/app/custom/new' }],
+      }
+    }
     return {
       intent: 'custom_trip',
       text: `Tell us where, when, your group size and budget, and staff prepare a proposal with an itinerary and price. Requests need at least 7 days' notice. A request is not a booking: you pay only if you accept the proposal.${dest ? ` You can start one for ${dest.name} now.` : ''}`,
       links: [{ label: 'Plan a custom trip', to: dest ? `/app/custom/new?destination=${dest.id}` : '/app/custom/new' }],
+    }
+  }
+
+  if (has(q, 'proposal') || (has(q, 'how long', 'when will i get') && has(q, 'request', 'custom'))) {
+    return {
+      intent: 'proposal_time',
+      text: 'Staff review each request, check hotels, guides and timing, and then send a proposal. You get a notification when it’s ready, and you can follow the status in My Trips. A proposal is valid for 7 days.',
+      links: customerId ? [{ label: 'Open My Trips', to: '/app/trips?tab=custom' }] : undefined,
     }
   }
 
@@ -234,16 +298,18 @@ export function answerQuestion(d: Dataset, { question, customerId, context }: As
   if (has(q, 'recommend', 'suggest', 'where should', 'where to go', 'best place', 'ideas')) {
     return {
       intent: 'recommend',
-      text: 'Your home screen shows suggestions based on your travel preferences, saved items and past trips, with the reason for each. Set your preferences to change them.',
+      text: 'Your home page shows suggestions based on your travel preferences, saved items and past trips, with the reason for each. Set your preferences to change them.',
       links: customerId ? [{ label: 'Travel preferences', to: '/app/preferences' }] : [{ label: 'Browse destinations', to: '/app/destinations' }],
     }
   }
 
-  if (dest) {
+  // Only when the place is named: a vague question on a tour page gets a clarification, not a brochure.
+  if (dests[0]) {
+    const dest = dests[0]
     const tours = toursAt(d, dest.id)
     return {
       intent: 'destination',
-      text: `${dest.name}, ${dest.province}: ${dest.summary} Best months: ${dest.bestMonths}. About ${dest.travelTime} from Manila.${tours.length ? ` ${tours.map((s) => tourLine(d, s)).join(' ')}` : ' We have no joiner tour there yet, but you can request a custom trip.'}`,
+      text: `${dest.name}, ${dest.province}: ${dest.summary} Best months: ${dest.bestMonths}. ${dest.travelTime.replace(/^./, (c) => c.toUpperCase())} from Manila.${tours.length ? ` ${tours.map((s) => tourLine(d, s)).join(' ')}` : ' We have no joiner tour there yet, but you can request a custom trip.'}`,
       links: [{ label: `About ${dest.name}`, to: `/app/destinations/${dest.id}` }],
     }
   }
@@ -254,9 +320,94 @@ export function answerQuestion(d: Dataset, { question, customerId, context }: As
 
   return {
     intent: 'unknown',
-    text: 'I don’t have a reliable answer for that. I can send your question to our staff so a person can reply.',
+    text: 'I’m not sure I understood that. Try asking it another way, pick one of the questions below, or send it to our staff so a person can reply.',
     escalate: true,
   }
+}
+
+const norm = (s: string) => s.toLowerCase().replace(/[’']/g, "'").replace(/[^a-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim()
+
+/** The tour or destination an answer was about, read from the links it offers. */
+function aboutOf(a: AssistantAnswer): AssistantContext | undefined {
+  for (const l of a.links ?? []) {
+    const t = l.to.match(/^\/app\/tours\/([^/?]+)/)
+    if (t) return { kind: 'tour', id: t[1] }
+    const dst = l.to.match(/^\/app\/destinations\/([^/?]+)/) ?? l.to.match(/destination=([^&]+)/)
+    if (dst) return { kind: 'destination', id: dst[1] }
+  }
+  return undefined
+}
+
+const PAYMENT = ['How much is the down payment?', 'How do I upload my receipt?', 'When will my payment be verified?', 'Which payment methods are accepted?']
+const TOUR = ["What's included?", 'Where is the pickup point?', 'Which dates are available?', 'Can I request a private trip?', 'How much is it?']
+const GENERAL = ['What tours have open seats?', 'How do I pay?', 'How do custom trips work?', 'How much is a van rental?', 'Talk to staff']
+
+/**
+ * Three or four follow-up questions after every answer, based on its topic and never repeating the question
+ * just asked. Each one is a question this assistant can answer.
+ */
+export function followUps(a: AssistantAnswer, asked: string, loggedIn: boolean, d?: Dataset): string[] {
+  if (a.intent === 'clarify' && a.options?.length) return a.options
+  const about = a.about
+  let list: string[]
+  switch (a.intent) {
+    case 'payment_methods':
+    case 'down_payment':
+    case 'upload_receipt':
+    case 'verification':
+      list = [...PAYMENT, 'Can I cancel?']
+      break
+    case 'price':
+    case 'inclusions':
+    case 'pickup':
+    case 'availability':
+    case 'what_to_bring':
+      list = about ? [...TOUR, 'What should I bring?'] : [...GENERAL]
+      break
+    case 'destination': {
+      const name = about && d ? d.destinations.find((x) => x.id === about.id)?.name : undefined
+      list = about?.kind === 'tour' ? [...TOUR] : ['What should I bring?', 'Can I request a private trip?', name ? `How much is a custom trip to ${name}?` : 'How are custom trips priced?', 'What tours have open seats?']
+      break
+    }
+    case 'custom_trip':
+    case 'custom_price':
+    case 'proposal_time':
+      list = ['How are custom trips priced?', 'How long does a proposal take?', 'Do I pay for a custom trip request?', 'Talk to staff']
+      break
+    case 'van_rental':
+      list = ['Where does the van pick us up?', 'How do I pay?', 'Can I request a custom trip instead?', 'Talk to staff']
+      break
+    case 'personal':
+      list = ['How do I upload my receipt?', 'When will my payment be verified?', 'Can I cancel?', 'Talk to staff']
+      break
+    case 'cancellation':
+      list = [loggedIn ? 'What is the status of my bookings?' : 'What tours have open seats?', 'How does the down payment work?', 'Talk to staff']
+      break
+    case 'human':
+    case 'login_needed':
+      list = ['What tours have open seats?', 'How do I pay?', 'How do custom trips work?']
+      break
+    case 'promo':
+    case 'recommend':
+      list = ['What tours have open seats?', 'How do custom trips work?', 'How much is a van rental?', 'How does the down payment work?']
+      break
+    default:
+      list = [loggedIn ? 'What is the status of my bookings?' : 'What tours have open seats?', ...GENERAL]
+  }
+  const seen = norm(asked)
+  const out = [...new Set(list)].filter((x) => norm(x) !== seen)
+  for (const g of GENERAL) if (out.length < 3 && !out.includes(g) && norm(g) !== seen) out.push(g)
+  return out.slice(0, 4)
+}
+
+/** One full reply: the answer, what it was about, and fresh follow-up questions. */
+export function respond(d: Dataset, input: AskInput, today = DEMO_TODAY, presets: ChatPreset[] = []): AssistantAnswer {
+  // Questions about a booking reference always read the customer's records, never a preset.
+  const preset = REF.test(input.question) ? undefined : matchPreset(presets, input.question)
+  const a: AssistantAnswer = preset ? { intent: 'preset', text: preset.answer, links: preset.link ? [preset.link] : undefined } : answerQuestion(d, input, today)
+  const about = aboutOf(a) ?? (['price', 'inclusions', 'pickup', 'availability', 'what_to_bring'].includes(a.intent) ? input.context : undefined)
+  const withAbout = { ...a, about }
+  return { ...withAbout, options: followUps(withAbout, input.question, !!input.customerId, d) }
 }
 
 function noTourAt(dest: Destination): AssistantAnswer {

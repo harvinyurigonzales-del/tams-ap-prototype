@@ -11,8 +11,8 @@ export function PhotoCredits() {
       <BackLink label="Back" />
       <h1 className="type-head text-[32px] text-charcoal md:text-[40px]">Photo credits</h1>
       <p className="mt-1 max-w-2xl text-sm text-ink-2">
-        The destination and vehicle photos in this prototype come from Wikimedia Commons and are used under the licenses below. They show the real places, but not
-        our own trips. Vehicle photos show the type of van, not the agency's own vehicles. Other pictures are illustrations made for the prototype.
+        The destination and vehicle photos on this site come from Wikimedia Commons and are used under the licenses below. They show the real places, but not
+        our own trips. Vehicle photos show the type of van, not the agency's own vehicles. Other pictures are illustrations made for this site.
       </p>
       <Card className="mt-5 divide-y divide-line">
         {credits.map((c) => (

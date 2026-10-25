@@ -5,6 +5,7 @@ import { STAFF_EMAIL } from '../../domain/assistant'
 import { fmtStamp } from '../../lib/format'
 import { useAssistant } from '../../state/assistant'
 import { myRecords, useCustomer } from '../../state/customerStore'
+import { usePresenter } from '../../state/presenter'
 import { useUi } from '../../state/ui'
 import type { Inquiry } from '../../seed/types'
 import { StatusBadge } from '../../ui/Badge'
@@ -59,7 +60,7 @@ export function Messages() {
           </ul>
         )}
       </Card>
-      <p className="mt-3 text-center text-xs text-ink-3">In-app only. Nothing is sent by email, SMS or live chat in this prototype.</p>
+      <p className="mt-3 text-center text-xs text-ink-3">Staff replies appear here and in your notifications.</p>
     </div>
   )
 }
@@ -74,6 +75,7 @@ export function MessageThread() {
 
 function Thread({ q }: { q: Inquiry }) {
   const { sendMessage, resolveInquiry, showSampleReply } = useCustomer()
+  const presenter = usePresenter((s) => s.on)
   const toast = useUi((s) => s.toast)
   const [text, setText] = useState('')
   const [error, setError] = useState('')
@@ -105,11 +107,10 @@ function Thread({ q }: { q: Inquiry }) {
               <p className="whitespace-pre-line">{m.text}</p>
               <p className={`mt-1 text-[11px] ${m.from === 'customer' ? 'text-brand-100' : 'text-ink-3'}`}>
                 {fmtStamp(m.at)}
-                {m.simulated && ' · sample reply'}
               </p>
             </div>
           ))}
-          {q.status === 'Awaiting staff' && <p className="text-center text-xs text-ink-2">Awaiting staff. Replies appear here, usually within one business day (sample policy).</p>}
+          {q.status === 'Awaiting staff' && <p className="text-center text-xs text-ink-2">Awaiting staff. Replies appear here, usually within one business day.</p>}
         </div>
         {q.status !== 'Resolved' ? (
           <div className="border-t border-line p-4">
@@ -154,12 +155,12 @@ function Thread({ q }: { q: Inquiry }) {
           <p className="border-t border-line px-5 py-4 text-sm text-ink-2">This conversation is resolved. Ask TAMS again any time if you need more help.</p>
         )}
       </Card>
-      {q.status === 'Awaiting staff' && (
+      {presenter && q.status === 'Awaiting staff' && (
         <div className="mt-4 rounded-2xl border border-dashed border-line-strong p-4">
           <p className="flex items-center gap-1.5 text-xs font-semibold text-ink-2">
-            <FlaskConical className="size-4" aria-hidden /> Demo control
+            <FlaskConical className="size-4" aria-hidden /> Presenter shortcut
           </p>
-          <p className="mt-1 text-xs text-ink-2">No staff are connected to this prototype. Show the prepared sample reply to continue the demo.</p>
+          <p className="mt-1 text-xs text-ink-2">Shows the staff team’s prepared reply to this conversation.</p>
           <Button
             size="sm"
             variant="secondary"
@@ -169,11 +170,11 @@ function Thread({ q }: { q: Inquiry }) {
               if (!r.ok) toast(r.error, 'error')
             }}
           >
-            Show sample staff reply
+            Show staff reply
           </Button>
         </div>
       )}
-      <p className="mt-3 text-center text-xs text-ink-3">Sample contact: {STAFF_EMAIL}. Nothing is sent by email, SMS or live chat.</p>
+      <p className="mt-3 text-center text-xs text-ink-3">You can also email us at {STAFF_EMAIL}.</p>
     </div>
   )
 }

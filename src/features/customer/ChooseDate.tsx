@@ -5,7 +5,6 @@ import { BOOKING_CUTOFF_DAYS, promoFor, shortRange } from '../../domain/rules'
 import { addDays, DEMO_TODAY, weekday } from '../../lib/demoClock'
 import { fmtDate, fmtRange, fmtTime, monthLabel, peso, shortDay } from '../../lib/format'
 import { useCustomer } from '../../state/customerStore'
-import { SampleTag } from '../../ui/Badge'
 import { Button, LinkButton } from '../../ui/Button'
 import { Card } from '../../ui/Card'
 import { EmptyState } from '../../ui/EmptyState'
@@ -128,7 +127,6 @@ export function ChooseDate() {
           {inMonth.length === 0 && <p className="mt-4 text-center text-sm text-ink-2">No departures this month. Try another month.</p>}
           <p className="mt-4 text-xs text-ink-3">
             Online booking closes {BOOKING_CUTOFF_DAYS} days before departure.
-            <SampleTag />
           </p>
         </Card>
 

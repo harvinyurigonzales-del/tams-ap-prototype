@@ -1,7 +1,7 @@
 import { addDays, daysBetween, DEMO_TODAY, overlaps } from '../lib/demoClock'
-import type { CustomRequest, Dataset, Destination, PriceLine, Proposal, RentalEstimate, RentalTripType, RequestStatus, TripPace, VehicleCategory } from '../seed/types'
+import type { CustomRequest, Dataset, Destination, PlannedTrip, PriceLine, Proposal, RentalEstimate, RentalRequest, RentalTripType, RequestStatus, TripPace, VehicleCategory } from '../seed/types'
 import { fmtDate } from '../lib/format'
-import { BOOKING_CUTOFF_DAYS } from './rules'
+import { blockOverlaps, BOOKING_CUTOFF_DAYS } from './rules'
 
 // Custom-trip and van-rental requests (customer revision). These are not bookings: they never hold seats,
 // never count as booking value or revenue, and only become a Pending booking when the customer accepts
@@ -77,7 +77,7 @@ export function freeVehicles(d: Dataset, categoryId: string, from: string, to: s
   return d.vehicles.filter(
     (v) =>
       v.categoryId === categoryId &&
-      !v.blocks.some((b) => overlaps(b.from, b.to, from, to)) &&
+      !v.blocks.some((b) => blockOverlaps(b, from, to)) &&
       !d.assignments.some((a) => a.vehicleId === v.id && overlaps(a.from, a.to, from, to)),
   )
 }
@@ -172,7 +172,8 @@ export function requestDestination(d: Dataset, r: Pick<CustomRequest, 'destinati
  * "simulate staff proposal" demo control so every amount follows the same rule. The itinerary follows the
  * customer's chosen stops when they gave some, otherwise the destination's highlights.
  */
-export function draftCustomProposal(r: Pick<CustomRequest, 'startDate' | 'endDate' | 'groupSize' | 'pickup' | 'stops' | 'pace'>, dest: Destination, sentAt: string): Proposal {
+export function draftCustomProposal(r: Pick<CustomRequest, 'startDate' | 'endDate' | 'groupSize' | 'pickup' | 'stops' | 'pace' | 'plan'>, dest: Destination, sentAt: string): Proposal {
+  if (r.plan) return proposalFromPlan(r as typeof r & { plan: PlannedTrip }, dest, sentAt)
   const days = daysBetween(r.startDate, r.endDate) + 1
   const nights = days - 1
   const vans = Math.ceil(r.groupSize / 12)
@@ -212,7 +213,52 @@ export function draftCustomProposal(r: Pick<CustomRequest, 'startDate' | 'endDat
   }
 }
 
+/** A proposal that follows a planner itinerary: the same included lines as the estimate, so amounts never change between screens. */
+function proposalFromPlan(r: Pick<CustomRequest, 'startDate' | 'endDate' | 'groupSize' | 'plan'> & { plan: PlannedTrip }, dest: Destination, sentAt: string): Proposal {
+  const p = r.plan
+  const lines = p.estimate
+    .filter((l) => (l.group === 'shared' || l.group === 'person') && l.amount)
+    .map((l) => line(l.label, l.unitPrice ?? l.amount!, l.qty ?? 1, l.unit ?? 'trip'))
+  const itinerary = p.itinerary.map((d) => {
+    const stops = d.items.filter((i) => i.kind === 'stop').map((i) => i.title)
+    return `Day ${d.day}: ${stops.length ? stops.join(', ') : d.label}`
+  })
+  return {
+    title: `${dest.name} custom trip`,
+    startDate: r.startDate,
+    endDate: r.endDate,
+    groupSize: r.groupSize,
+    itinerary,
+    inclusions: p.estimate.filter((l) => (l.group === 'shared' || l.group === 'person') && l.amount).map((l) => l.label),
+    exclusions: [...p.estimate.filter((l) => l.group === 'optional' || l.group === 'quote').map((l) => l.label), 'Personal expenses'],
+    lines,
+    total: lines.reduce((n, l) => n + l.amount, 0),
+    validUntil: addDays(sentAt.slice(0, 10), PROPOSAL_VALID_DAYS),
+    sentAt,
+  }
+}
+
 export const proposalExpired = (validUntil: string, today = DEMO_TODAY) => validUntil < today
+
+/** Where a sent proposal or quote stands with the customer, for staff follow-up. */
+export type ProposalTrack = 'Draft' | 'Sent' | 'Changes requested' | 'Revising' | 'Accepted' | 'Expired'
+
+export function proposalTrack(r: CustomRequest | RentalRequest, today = DEMO_TODAY): ProposalTrack | null {
+  const sent = 'categoryId' in r ? r.quote : r.proposal
+  if (r.status === 'Accepted') return 'Accepted'
+  if (r.status === 'Proposal ready' && sent) return proposalExpired(sent.validUntil, today) ? 'Expired' : 'Sent'
+  if (r.status === 'Under review') {
+    if (sent) return /asked for changes/i.test(r.events.at(-1)?.note ?? '') ? 'Changes requested' : 'Revising'
+    if ('draftProposal' in r && r.draftProposal) return 'Draft'
+  }
+  return null
+}
+
+/** The customer's words from their latest change request, without the event prefix. */
+export const changeRequestText = (r: CustomRequest | RentalRequest) => {
+  const e = [...r.events].reverse().find((x) => /asked for changes/i.test(x.note))
+  return e?.note.replace(/^.*?asked for changes:\s*/i, '')
+}
 
 export interface CustomInput {
   destinationId: string

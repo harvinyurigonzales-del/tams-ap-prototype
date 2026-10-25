@@ -66,7 +66,7 @@ export function Reports() {
     <div>
       <PageHeader
         title="Reports"
-        subtitle="Every figure is calculated from the bookings and payments in this demo. Custom-trip and van-rental requests are not counted; an accepted request counts once, as its booking."
+        subtitle="Every figure is calculated from the bookings and payments on record. Custom-trip and van-rental requests are not counted; an accepted request counts once, as its booking."
         actions={
           <Button variant="secondary" icon={<Download className="size-4" aria-hidden />} onClick={exportCsv} disabled={empty}>
             Export CSV

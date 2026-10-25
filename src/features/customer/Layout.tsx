@@ -1,13 +1,15 @@
-import { Bell, ChevronDown, Compass, Heart, Home, MessageCircle, Star, Ticket, UserRound } from 'lucide-react'
+import { Bell, ChevronDown, Compass, Heart, Home, LogOut, MessageCircle, Star, Ticket, UserRound } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAssistant } from '../../state/assistant'
+import { usePresenter } from '../../state/presenter'
 import { useCustomer, useMe } from '../../state/customerStore'
 import { BrandMark } from '../../ui/BrandMark'
+import { ConfirmDialog } from '../../ui/Dialog'
 import { AssistantMount } from './Assistant'
 
 /** Paths that belong to the Explore tab on mobile. */
-const EXPLORE_PATHS = ['/app/explore', '/app/tours', '/app/destinations', '/app/rental', '/app/custom/new', '/app/book']
+const EXPLORE_PATHS = ['/app/explore', '/app/tours', '/app/destinations', '/app/rental', '/app/custom/new', '/app/custom/form', '/app/book']
 /** On desktop, van rental has its own tab, so Explore covers tours and destinations. */
 const DESKTOP_EXPLORE = ['/app/explore', '/app/tours', '/app/destinations', '/app/book']
 
@@ -77,7 +79,7 @@ export function Shell() {
                 <AccountMenu tone={tone} />
               ) : (
                 <Link
-                  to={`/app/login?next=${encodeURIComponent(pathname)}`}
+                  to="/app/login"
                   className={`ml-1 shrink-0 rounded-full px-3.5 py-2 text-sm sm:px-4 font-semibold whitespace-nowrap ${home ? 'bg-white text-charcoal hover:bg-ivory' : 'bg-brand-600 text-white hover:bg-brand-700'}`}
                 >
                   Log in
@@ -102,7 +104,7 @@ export function Shell() {
         </main>
         <footer className="mx-auto max-w-[1180px] px-4 pt-2 pb-8 text-xs text-ink-3 sm:px-6">
           <p className="border-t border-line pt-4">
-            TAMS AP Travel and Tours prototype · sample data only. Photos are mostly from Wikimedia Commons, credited on the{' '}
+            TAMS AP Travel and Tours. Photos are mostly from Wikimedia Commons, credited on the{' '}
             <Link to="/app/credits" className="font-semibold text-ink-2 underline underline-offset-2 hover:text-ink">
               Photo credits
             </Link>{' '}
@@ -153,7 +155,10 @@ function IconLink({ to, label, icon, count = 0, tone }: { to: string; label: str
 
 function AccountMenu({ tone }: { tone: Tone }) {
   const me = useMe()
+  const logout = useCustomer((s) => s.logout)
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+  const [out, setOut] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const { pathname } = useLocation()
   useEffect(() => {
@@ -175,12 +180,13 @@ function AccountMenu({ tone }: { tone: Tone }) {
     }
   }, [open])
   if (!me) return null
+  const presenter = usePresenter.getState().on
   const items = [
     { to: '/app/account', label: 'Account' },
     { to: '/app/preferences', label: 'Travel preferences' },
     { to: '/app/saved', label: 'Saved' },
     { to: '/app/messages', label: 'Messages' },
-    { to: '/', label: 'Demo start' },
+    ...(presenter ? [{ to: '/', label: 'Presenter start page' }] : []),
   ]
   return (
     <div ref={ref} className="relative hidden md:block">
@@ -211,8 +217,30 @@ function AccountMenu({ tone }: { tone: Tone }) {
               </li>
             ))}
           </ul>
+          <div className="mt-1 border-t border-line pt-1">
+            <button
+              onClick={() => {
+                setOpen(false)
+                setOut(true)
+              }}
+              className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-semibold text-sili hover:bg-sand"
+            >
+              <LogOut className="size-4" aria-hidden /> Log out
+            </button>
+          </div>
         </div>
       )}
+      <ConfirmDialog
+        open={out}
+        onClose={() => setOut(false)}
+        title="Log out?"
+        body="You can log back in any time to see your trips."
+        confirmLabel="Log out"
+        onConfirm={() => {
+          logout()
+          navigate('/app', { replace: true })
+        }}
+      />
     </div>
   )
 }

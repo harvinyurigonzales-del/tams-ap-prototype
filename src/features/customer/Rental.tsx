@@ -50,7 +50,7 @@ export function RentalLanding() {
       <div className="mt-8 grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
           <h2 className="type-head text-[22px] text-charcoal">
-            How pricing works <SampleTag />
+            How pricing works
           </h2>
           <ul className="mt-3 space-y-2 text-sm text-ink-2">
             <li>Rates are per service day: up to {SERVICE_HOURS_PER_DAY} hours of driving and waiting, with fuel and the driver included.</li>
@@ -327,7 +327,7 @@ export function RentalRequestForm() {
           <TextArea label="Special requests (optional)" maxLength={300} value={f.requests} onChange={(e) => upd({ requests: e.target.value })} placeholder="Child seats, extra luggage, a stop for lunch" />
           <div className="grid gap-4 sm:grid-cols-2">
             <TextField label="Contact person" value={f.contactName} onChange={(e) => upd({ contactName: e.target.value })} error={errors.contactName} />
-            <TextField label="Contact mobile" inputMode="tel" value={f.contactMobile} onChange={(e) => upd({ contactMobile: e.target.value })} error={errors.contactMobile} hint="Sample number. No messages are sent." />
+            <TextField label="Contact mobile" inputMode="tel" value={f.contactMobile} onChange={(e) => upd({ contactMobile: e.target.value })} error={errors.contactMobile} hint="Staff use this number about your request." />
           </div>
           {(errors.availability || (live.availability && timingOk)) && (
             <p role="alert" className="rounded-xl bg-warn-bg px-3.5 py-2.5 text-sm text-warn">
