@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import type { ChatPreset } from '../domain/assistant'
+import { startingState } from './persist'
 
 // Preset answers that admins manage in Manage chatbot. Ask TAMS checks them before its built-in answers.
-// They live outside both datasets because they are configuration, so an edit shows up in Ask TAMS right away.
+// They are configuration rather than records, saved with the shared data so an edit shows up in Ask TAMS right away.
 
 const SEED: ChatPreset[] = [
   {
@@ -50,7 +51,7 @@ export function presetError(p: Omit<ChatPreset, 'id' | 'active'>, others: ChatPr
 }
 
 export const useChatbot = create<ChatbotState>((set, get) => ({
-  presets: structuredClone(SEED),
+  presets: startingState().presets ?? structuredClone(SEED),
   save: (id, p) => {
     const err = presetError(p, get().presets.filter((x) => x.id !== id))
     if (err) return { ok: false, error: err }

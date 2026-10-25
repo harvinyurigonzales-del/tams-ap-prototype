@@ -1,12 +1,12 @@
-import { expect, test, type Page } from './fixtures'
+import { expect, test, type Page, signInSample } from './fixtures'
 
-// Customer revision journeys. In-app navigation only: a full page load resets the in-memory demo.
+// Customer journeys. Records are kept in the browser, so reloads and a staff tab in the same browser see the same data.
 
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Main' }).last()
 
 async function loginAsMaria(page: Page) {
   await page.goto('/app/login')
-  await page.getByRole('button', { name: 'Use sample account' }).click()
+  await signInSample(page, 'Maria Santos')
   await expect(page.getByText('Hello, Maria')).toBeVisible()
 }
 
@@ -35,13 +35,13 @@ test('guest plans a custom trip from a destination, logs in, and tracks it to a 
   await page.getByLabel('Contact person').fill('Maria Santos')
   await page.getByLabel('Contact mobile').fill('0900 555 0101')
   await page.getByRole('button', { name: 'Log in to send request' }).click()
-  await page.getByRole('button', { name: 'Use sample account' }).click()
+  await signInSample(page, 'Maria Santos')
   // Back on the form with the answers kept.
   await expect(page.getByRole('combobox', { name: 'Pickup landmark' })).toHaveValue('Barasoain Church')
   await expect(page.getByRole('checkbox', { name: /Sagada Pottery/ })).toBeChecked()
   await page.getByRole('button', { name: 'Send request' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Send request' }).click()
-  await expect(page.getByText('CR-2026-0013 · custom trip request')).toBeVisible()
+  await expect(page.getByText(/CR-2026-\d{4} · custom trip request/)).toBeVisible()
   await expect(page.getByText('Submitted').first()).toBeVisible()
   await page.getByRole('button', { name: 'Simulate staff review' }).click()
   await expect(page.getByText('Under review').first()).toBeVisible()
@@ -49,26 +49,17 @@ test('guest plans a custom trip from a destination, logs in, and tracks it to a 
   await expect(page.getByRole('heading', { name: 'Proposal: Sagada custom trip' })).toBeVisible()
   await page.getByRole('button', { name: 'Accept proposal' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Accept proposal' }).click()
-  await expect(page).toHaveURL(/\/app\/trips\/BK-2026-0148$/)
+  await expect(page).toHaveURL(/\/app\/trips\/BK-2026-\d{4}$/)
   await expect(page.getByRole('heading', { name: 'Sagada custom trip', exact: true })).toBeVisible()
-  await expect(page.getByText('BK-2026-0148')).toBeVisible()
   await expect(page.getByText('Pending').first()).toBeVisible()
-  await expect(page.getByRole('link', { name: 'CR-2026-0013' })).toBeVisible()
+  await expect(page.getByRole('link', { name: /^CR-2026-\d{4}$/ })).toBeVisible()
 })
 
-test('seeded proposal, rental request with validation, and quote acceptance', async ({ page }) => {
+test('rental request with validation, a quote from a staff tab, and quote acceptance', async ({ page }) => {
   await loginAsMaria(page)
-  await page.getByRole('link', { name: /Proposal ready to review/ }).click()
-  await expect(page.getByText('₱30,900').first()).toBeVisible()
-  await page.getByRole('button', { name: 'Request changes' }).click()
-  await page.getByLabel('What would you like to change?').fill('Can we leave an hour later on day 1?')
-  await page.getByRole('button', { name: 'Send change request' }).click()
-  await expect(page.getByText('Changes requested')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Accept proposal' })).toHaveCount(0)
-
-  await nav(page).getByRole('link', { name: 'Explore' }).click()
-  await page.getByRole('link', { name: /Van rental with driver/ }).click()
-  await page.getByRole('link', { name: 'Request a van', exact: true }).click()
+  await page.getByRole('button', { name: 'More pages' }).click()
+  await page.getByRole('dialog').getByRole('link', { name: /Van Rental/ }).click()
+  await page.getByRole('link', { name: 'Request a van', exact: true }).first().click()
   await page.getByLabel('Pickup address or landmark').fill('Malolos Cathedral')
   await page.getByLabel('Destination province').selectOption('Outside Luzon')
   await page.getByLabel('Main destination').fill('Tagaytay')
@@ -81,17 +72,30 @@ test('seeded proposal, rental request with validation, and quote acceptance', as
   await expect(page.getByText('₱6,500').first()).toBeVisible()
   await page.getByRole('button', { name: 'Send request' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Send request' }).click()
-  await expect(page.getByText('VR-2026-0007 · van rental request')).toBeVisible()
+  const heading = page.getByText(/VR-2026-\d{4} · van rental request/)
+  await expect(heading).toBeVisible()
+  const id = (await heading.textContent())!.match(/VR-2026-\d{4}/)![0]
   await expect(page.getByText(/A request does not reserve a van/)).toBeVisible()
 
-  await nav(page).getByRole('link', { name: 'My Trips' }).click()
-  await page.getByRole('tab', { name: /Van rental requests/ }).click()
-  await expect(page.getByText(/VR-2026-0007/)).toBeVisible()
-  await page.getByRole('link', { name: /Morong, Bataan/ }).click()
+  // Staff work on it in another tab of the same browser.
+  const staff = await page.context().newPage()
+  await staff.setViewportSize({ width: 1366, height: 860 })
+  await staff.goto('/admin/login')
+  await signInSample(staff, 'Liza Manalo')
+  await expect(staff.getByRole('heading', { name: /Liza/ })).toBeVisible()
+  await staff.goto(`/admin/requests?id=${id}`)
+  await staff.getByRole('button', { name: 'Start review' }).click()
+  await staff.getByRole('button', { name: 'Send quote' }).click()
+  await staff.getByRole('dialog').getByRole('button', { name: 'Send quote' }).click()
+  await expect(staff.getByText('Waiting for the customer to accept or ask for changes.')).toBeVisible()
+
+  // The customer tab updates without a reload.
+  await expect(page.getByRole('button', { name: 'Accept quote' })).toBeVisible()
   await page.getByRole('button', { name: 'Accept quote' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Accept quote' }).click()
   await expect(page.getByText('From request')).toBeVisible()
-  await expect(page.getByText('₱14,000').first()).toBeVisible()
+  await staff.reload()
+  await expect(staff.getByText(/Accepted|Booked/).first()).toBeVisible()
 })
 
 test('Ask TAMS answers, escalates to staff, and the sample reply arrives in Messages', async ({ page }) => {
@@ -107,9 +111,8 @@ test('Ask TAMS answers, escalates to staff, and the sample reply arrives in Mess
   await panel.getByRole('button', { name: 'Send to staff' }).click()
   await expect(panel.getByLabel('Your question')).toHaveValue(/dog/)
   await panel.getByLabel('Subject').fill('Pet on the Tagaytay trip')
-  await panel.getByLabel(/Related booking/).selectOption('BK-2026-0141')
   await panel.getByRole('button', { name: 'Send to staff' }).click()
-  await expect(panel.getByText('Sent to staff · INQ-2026-0005')).toBeVisible()
+  await expect(panel.getByText(/Sent to staff · INQ-2026-\d{4}/)).toBeVisible()
   await panel.getByRole('link', { name: 'Open in Messages' }).click()
   await expect(page.getByRole('heading', { name: 'Pet on the Tagaytay trip' })).toBeVisible()
   await expect(page.getByText('Awaiting staff').first()).toBeVisible()
@@ -121,13 +124,14 @@ test('Ask TAMS answers, escalates to staff, and the sample reply arrives in Mess
 test('saved items stay consistent, and guests are asked to log in to save', async ({ page }) => {
   await page.goto('/app/tours/SVC-TAG')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
-  await page.getByRole('button', { name: 'Use sample account' }).click()
+  await signInSample(page, 'Maria Santos')
   await expect(page.getByRole('heading', { name: 'Tagaytay Day Tour' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Saved', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  await page.getByRole('link', { name: 'Saved' }).first().click()
-  await expect(page.getByRole('heading', { name: /Tours/ })).toContainText('2')
-  await page.getByRole('button', { name: 'Remove Tagaytay Day Tour from Saved' }).click()
+  await page.getByRole('button', { name: 'More pages' }).click()
+  await page.getByRole('dialog').getByRole('link', { name: /Saved/ }).click()
   await expect(page.getByRole('heading', { name: /Tours/ })).toContainText('1')
+  await page.getByRole('button', { name: 'Remove Tagaytay Day Tour from Saved' }).click()
+  await expect(page.getByText(/Nothing saved yet|No saved/i).first()).toBeVisible()
 })
 
 test('old links redirect to the new routes', async ({ page }) => {
@@ -139,23 +143,12 @@ test('old links redirect to the new routes', async ({ page }) => {
   await expect(page).toHaveURL(/\/app\/login\?next=%2Fapp%2Fmessages/)
 })
 
-test('only travellers with a completed trip can rate, and the review goes public', async ({ page }) => {
-  await page.goto('/app')
-  await nav(page).getByRole('link', { name: 'Reviews' }).click()
+test('guests and travellers without a completed trip cannot rate', async ({ page }) => {
+  await page.goto('/app/reviews')
   await expect(page.getByRole('heading', { name: 'Reviews from our travellers' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Log in to rate' })).toBeVisible()
   await loginAsMaria(page)
-  await nav(page).getByRole('link', { name: 'Reviews' }).click()
-  await page.getByRole('button', { name: 'Rate this trip' }).click()
-  await page.getByRole('button', { name: 'Post review' }).click()
-  await expect(page.getByText('Choose a star rating.')).toBeVisible()
-  await page.getByText('5 stars, Excellent').click({ force: true })
-  await page.getByLabel('Title').fill('Taal in full view')
-  await page.getByLabel('Your review').fill('Pickup was on time and the lunch spot had the best view of the lake.')
-  await page.getByRole('button', { name: 'Post review' }).click()
-  await expect(page.getByText('Thanks! Your review is now public.')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Taal in full view' })).toBeVisible()
-  await expect(page.getByText('Your review', { exact: true }).first()).toBeVisible()
+  await page.goto('/app/reviews')
   await expect(page.getByRole('button', { name: 'Rate this trip' })).toHaveCount(0)
 })
 
@@ -165,15 +158,15 @@ test.describe('desktop', () => {
     await loginAsMaria(page)
     const main = page.getByRole('navigation', { name: 'Main' }).first()
     for (const l of ['Home', 'Explore', 'Van Rental', 'Reviews', 'My Trips']) await expect(main.getByRole('link', { name: l })).toBeVisible()
-    await expect(page.getByRole('heading', { name: /^Because you like/ })).toBeVisible()
-    await expect(page.getByText('Matches Food and Nature · within your ₱3,000 budget').first()).toBeVisible()
+    // Maria starts without preferences, so Home shows the general rows.
+    await expect(page.getByRole('heading', { name: /^Because you like/ })).toHaveCount(0)
     await page.getByRole('button', { name: /Account menu/ }).click()
-    await page.getByRole('link', { name: 'Travel preferences' }).click()
-    await page.getByRole('button', { name: 'Clear all' }).click()
+    // Only Account and Travel preferences: Saved, Messages and Notifications have their own header buttons.
+    await expect(page.locator('ul').filter({ has: page.getByRole('link', { name: 'Travel preferences' }) }).getByRole('link')).toHaveText(['Account', 'Travel preferences'])
+    await page.getByRole('link', { name: 'Travel preferences', exact: true }).click()
     await page.getByRole('button', { name: 'Beach' }).click()
     await page.getByRole('button', { name: 'Save preferences' }).click()
     await expect(page.getByText(/^Matches Beach/).first()).toBeVisible()
-    await expect(page.getByText('Matches Food and Nature · within your ₱3,000 budget')).toHaveCount(0)
     await page.screenshot({ path: 'test-results/customer-desktop-home.png', fullPage: true })
   })
 })

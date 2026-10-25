@@ -6,6 +6,7 @@ import { Dialog } from '../../ui/Dialog'
 import { Link } from 'react-router-dom'
 import { fmtStamp } from '../../lib/format'
 import type { AppNotification, Dataset } from '../../seed/types'
+import { useAdmin } from '../../state/adminStore'
 
 export const customerOf = (d: Dataset, id: string) => d.customers.find((c) => c.id === id)
 export const serviceOf = (d: Dataset, id: string) => d.services.find((s) => s.id === id)!
@@ -39,15 +40,19 @@ export function MiniKpi({ label, value }: { label: string; value: ReactNode }) {
 }
 
 export function ActivityList({ items, limit }: { items: AppNotification[]; limit?: number }) {
+  const markRead = useAdmin((s) => s.markRead)
   const list = limit ? items.slice(0, limit) : items
   return (
     <ul className="divide-y divide-line">
       {list.map((n) => (
         <li key={n.id}>
-          <Link to={n.link ?? '/admin/notifications'} className="flex gap-3 px-1 py-3 hover:bg-surface-muted">
-            <span className={`mt-1.5 size-2 shrink-0 rounded-full ${n.read ? 'bg-line' : 'bg-brand-600'}`} aria-label={n.read ? undefined : 'Unread'} />
+          <Link to={n.link ?? '/admin/notifications'} onClick={() => markRead(n.id)} className="flex gap-3 px-1 py-3 hover:bg-surface-muted">
+            <span className={`mt-1.5 size-2 shrink-0 rounded-full ${n.read ? 'bg-line' : 'bg-sili'}`} aria-hidden />
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-ink">{n.title}</span>
+              <span className={`block text-sm ${n.read ? 'font-medium text-ink-2' : 'font-semibold text-ink'}`}>
+                {n.title}
+                {!n.read && <span className="sr-only"> (unread)</span>}
+              </span>
               <span className="block text-sm text-ink-2">{n.body}</span>
               <span className="block text-xs text-ink-3">
                 {fmtStamp(n.at)} · {n.category}

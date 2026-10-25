@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { NotFound } from '../../app/NotFound'
-import { useCustomer } from '../../state/customerStore'
+import { useWorkspace } from '../../state/auth'
 import { Account, Notifications } from './Account'
 import { ForgotPassword, Login, Signup } from './Auth'
 import { BookingForm, BookingReceived } from './Book'
@@ -20,6 +20,7 @@ import { Saved } from './Saved'
 import { TourDetails } from './Tours'
 import { PhotoCredits } from './Credits'
 import { Planner } from './planner/Planner'
+import { justSignedOut } from '../../state/persist'
 import { TripDetails, Trips } from './Trips'
 
 export function CustomerRoutes() {
@@ -78,11 +79,15 @@ function LegacyService() {
   return <Navigate to={`/app/tours/${serviceId}${rest ? `/${rest}` : ''}`} replace />
 }
 
-/** Route guard for the demo. It shows intended behaviour only; it is not security. */
+/**
+ * Customer-only pages. Guests are asked to log in and come back; a signed-in staff member goes to the staff
+ * portal. This shows intended behaviour only; real access control belongs on a server.
+ */
 function RequireCustomer() {
-  const loggedIn = useCustomer((s) => !!s.customerId)
+  const workspace = useWorkspace()
   const loc = useLocation()
-  if (!loggedIn) return <Navigate to={`/app/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />
+  if (workspace === 'staff') return <Navigate to="/admin" replace />
+  if (!workspace) return <Navigate to={justSignedOut() ? '/app' : `/app/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />
   return <Outlet />
 }
 

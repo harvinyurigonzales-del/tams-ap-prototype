@@ -154,7 +154,7 @@ export function Questions() {
           </div>
         </Card>
 
-        <div className="fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 border-t border-line bg-surface/95 px-4 py-3 backdrop-blur md:static md:mt-5 md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/95 px-4 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))] backdrop-blur md:static md:mt-5 md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 md:max-w-none">
             <Button variant="secondary" onClick={() => (q === 0 ? go('intro') : move(q - 1))} icon={<ArrowLeft className="size-4" aria-hidden />}>
               Back

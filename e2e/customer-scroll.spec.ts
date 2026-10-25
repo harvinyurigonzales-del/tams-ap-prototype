@@ -10,9 +10,8 @@ test('navigation survives a patched window.scrollTo', async ({ page }) => {
     }) as typeof window.scrollTo
   })
   await page.goto('/')
-  await page.getByRole('link', { name: /Customer demo/ }).click()
   await page.getByRole('link', { name: /^Book this date/ }).click()
   await expect(page.getByRole('heading', { name: 'Choose date' })).toBeVisible()
-  await page.getByRole('link', { name: 'Home', exact: true }).first().click()
+  await page.getByRole('link', { name: 'TAMS AP home' }).click()
   await expect(page.getByRole('heading', { name: 'Tara, alis muna tayo.' })).toBeVisible()
 })

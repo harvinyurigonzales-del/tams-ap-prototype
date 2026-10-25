@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { bookingsPerWeek, dashboard, PERIODS, statusCounts } from '../../domain/metrics'
 import { money, shortRange } from '../../domain/rules'
 import { fmtDate, peso } from '../../lib/format'
-import { useAdmin, useMe } from '../../state/adminStore'
+import { staffNotifications, useAdmin, useMe } from '../../state/adminStore'
 import { LocalTag, StatusBadge } from '../../ui/Badge'
 import { Card, SectionTitle } from '../../ui/Card'
 import { BarList, ColumnChart } from '../../ui/Charts'
@@ -101,7 +101,7 @@ export function Dashboard() {
           >
             Recent activity
           </SectionTitle>
-          <ActivityList items={data.notifications} limit={5} />
+          <ActivityList items={staffNotifications(data).sort((a, b) => b.at.localeCompare(a.at))} limit={5} />
         </Card>
       </div>
     </div>

@@ -3,17 +3,19 @@ import { answerQuestion } from '../domain/assistant'
 import { bookingReport, dashboard, PERIODS, revenueReport, statusCounts } from '../domain/metrics'
 import { bookableDeparture, recKey, recommendationRows, type RecContext } from '../domain/recommend'
 import { rentalEstimate, validateRental, type RentalInput } from '../domain/requests'
-import { adminSeed, customerSeed } from '../seed/derive'
+import { adminFixture as adminSeed, customerFixture as customerSeed, loadFixture } from './fixtures'
 import type { Dataset } from '../seed/types'
 import { useAdmin } from '../state/adminStore'
 import { DEMO_CUSTOMER, NEW_CUSTOMER, useCustomer } from '../state/customerStore'
 import { resetAll } from '../state/demo'
+import { sharedSeed } from '../seed/derive'
 
 const STD = () => customerSeed().vehicleCategories[0]
 const login = (acct = DEMO_CUSTOMER) => expect(useCustomer.getState().login(acct.email, acct.password).ok).toBe(true)
 
 beforeEach(() => {
   resetAll()
+  loadFixture(customerSeed())
 })
 
 describe('van rental estimate', () => {
@@ -227,7 +229,7 @@ describe('reset', () => {
     s.escalate({ subject: 'a', text: 'b' })
     resetAll()
     const after = useCustomer.getState()
-    expect(after.data).toEqual(customerSeed())
+    expect(after.data).toEqual(sharedSeed().data)
     expect([after.viewed, after.dismissed, after.chat]).toEqual([[], [], []])
     expect(after.checklist).toEqual({})
     expect(after.drafts).toEqual({})

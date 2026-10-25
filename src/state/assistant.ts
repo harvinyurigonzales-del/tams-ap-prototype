@@ -6,8 +6,9 @@ import { useCustomer } from './customerStore'
 
 /**
  * Ask TAMS state: whether the panel is open, what the customer is asking about, and the answer in progress.
- * Answering lives here rather than in the panel, so closing the panel or changing page mid-answer never loses
- * or duplicates a reply. The conversation itself is kept in the customer session (useCustomer().chat).
+ * Answering lives here rather than in the panel. Each opening is a fresh conversation: closing or minimising the
+ * panel clears it, and a reply still on its way is dropped so it never shows up in the next conversation.
+ * Follow-up questions keep their context while the panel stays open.
  */
 interface AssistantUi {
   open: boolean
@@ -17,6 +18,7 @@ interface AssistantUi {
   topic?: AssistantContext
   pending: boolean
   openWith: (context?: AssistantContext, prefill?: string) => void
+  /** Closes the panel and ends the conversation. */
   close: () => void
   clearContext: () => void
   /** Sends a question, typed or picked from the suggestions. Ignored while an answer is on its way. */
@@ -65,7 +67,11 @@ export const useAssistant = create<AssistantUi>((set, get) => {
       set({ open: true, context: context ?? cur, ...(changed ? { topic: undefined } : {}) })
       if (prefill) get().ask(prefill)
     },
-    close: () => set({ open: false }),
+    close: () => {
+      seq++
+      useCustomer.getState().clearChat()
+      set({ open: false, pending: false, topic: undefined, context: undefined })
+    },
     clearContext: () => set({ context: undefined, topic: undefined }),
     ask: (question) => {
       const q = question.replace(/\s+/g, ' ').trim()

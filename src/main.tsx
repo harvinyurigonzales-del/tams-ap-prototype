@@ -7,12 +7,15 @@ import '@fontsource/arvo/700.css'
 import './styles.css'
 import { App } from './app/App'
 import { ErrorBoundary } from './app/ErrorBoundary'
+import { startSync } from './state/sync'
 
 // The app used to install a service worker. Remove it from browsers that still have it, so every visit loads the live site.
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((regs) => regs.forEach((r) => r.unregister())).catch(() => {})
   if ('caches' in window) caches.keys().then((keys) => keys.forEach((k) => caches.delete(k))).catch(() => {})
 }
+
+startSync()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

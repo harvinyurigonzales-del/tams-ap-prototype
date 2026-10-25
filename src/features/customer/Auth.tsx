@@ -1,11 +1,12 @@
-import { ArrowLeft, CalendarDays, Eye, EyeOff, Lock, Mail, MailCheck, Phone, UserRound, Users } from 'lucide-react'
+import { ArrowLeft, CalendarDays, ChevronDown, Eye, EyeOff, Lock, Mail, MailCheck, Phone, UserRound, Users } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { departureAvailability } from '../../domain/rules'
 import { GOOGLE_CLIENT_ID, loadGoogleIdentity, profileFromCredential } from '../../lib/google'
 import { fmtRange } from '../../lib/format'
 import { photoRef } from '../../seed/photos'
-import { DEMO_CUSTOMER, NEW_CUSTOMER, useCustomer } from '../../state/customerStore'
+import { destinationFor, SAMPLE_ACCOUNTS, signIn, useWorkspace, workspaceHome } from '../../state/auth'
+import { useCustomer } from '../../state/customerStore'
 import { useUi } from '../../state/ui'
 import { BrandMark } from '../../ui/BrandMark'
 import { Button } from '../../ui/Button'
@@ -14,13 +15,8 @@ import { TextField } from '../../ui/Field'
 import { Picture } from '../../ui/Picture'
 import { emailError, mobileError, nameError, newPasswordError, passwordError, sleep } from '../../ui/validate'
 
-/** Main tabs a guest gets bounced from; logging in from one of them starts on Home instead. */
-const TAB_PAGES = ['/app/trips', '/app/account', '/app/saved', '/app/messages', '/app/notifications', '/app/preferences']
-/** Where to go after login: back into a task the guest started (booking, request, saving), otherwise Home. */
-const safeNext = (n: string | null) => {
-  if (!n || !n.startsWith('/app') || n.startsWith('/app/login') || n.startsWith('/app/signup')) return '/app'
-  return TAB_PAGES.includes(n.replace(/\/$/, '')) ? '/app' : n
-}
+/** Where a new customer goes after signing up: back into the task they started, otherwise Home. */
+const safeNext = (n: string | null) => destinationFor('customer', n)
 
 export function PasswordToggle({ shown, onToggle }: { shown: boolean; onToggle: () => void }) {
   return (
@@ -54,10 +50,7 @@ function AuthLayout({ title, subtitle, children, footer }: { title: string; subt
             <p className="mt-3 type-hero text-[56px] xl:text-[64px]">Tara, alis muna tayo.</p>
             <p className="mt-4 text-lg text-white/85">Joiner tours, private vans and custom trips across Luzon, booked in a few taps and tracked until you’re home.</p>
           </div>
-          <p className="text-[11px] text-white/75 max-lg:hidden">
-            {AUTH_PHOTO.caption}
-            {image?.credit && ` · Photo: ${image.credit.author}, ${image.credit.license}`}
-          </p>
+          <p className="text-[11px] text-white/75 max-lg:hidden">{AUTH_PHOTO.caption}</p>
         </div>
       </aside>
       <main className="flex items-start justify-center px-5 py-8 sm:py-12 lg:items-center lg:px-12">
@@ -99,28 +92,15 @@ function ContinueContext({ next }: { next: string }) {
 
 /* ------------------------------------------------------------------ Google */
 
-function GoogleG() {
-  return (
-    <svg viewBox="0 0 48 48" className="size-5" aria-hidden>
-      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
-      <path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
-      <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z" />
-      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
-    </svg>
-  )
-}
-
 /**
- * "Continue with Google". With a configured client ID this renders Google's own button and signs in through
- * Google's popup. Without one, the button explains that Google sign-in is not connected yet; it never pretends
- * to have signed anyone in.
+ * "Continue with Google", only when a Google client ID is configured: Google's own button signs in through
+ * Google's popup. Without one, nothing is shown, so there is never a sign-in button that does not work.
  */
 function GoogleSignIn({ next, label }: { next: string; label: string }) {
   const googleSignIn = useCustomer((s) => s.googleSignIn)
   const navigate = useNavigate()
   const holder = useRef<HTMLDivElement>(null)
   const [error, setError] = useState('')
-  const [info, setInfo] = useState(false)
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
@@ -152,8 +132,9 @@ function GoogleSignIn({ next, label }: { next: string; label: string }) {
     }
   }, [googleSignIn, navigate, next])
 
-  if (GOOGLE_CLIENT_ID) {
-    return (
+  if (!GOOGLE_CLIENT_ID) return null
+  return (
+    <>
       <div>
         <div ref={holder} className="flex min-h-11 justify-center" aria-label={label} />
         {!ready && !error && <p className="text-center text-xs text-ink-3">Loading Google sign-in…</p>}
@@ -163,21 +144,7 @@ function GoogleSignIn({ next, label }: { next: string; label: string }) {
           </p>
         )}
       </div>
-    )
-  }
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => setInfo(true)}
-        className="flex h-12 w-full items-center justify-center gap-3 rounded-full border border-line-strong bg-white text-[15px] font-semibold text-[#1f1f1f] transition-colors hover:bg-[#f8f8f8]"
-      >
-        <GoogleG /> {label}
-      </button>
-      <Dialog open={info} onClose={() => setInfo(false)} title="Google sign-in isn’t available yet">
-        <p>Signing in with Google isn’t available yet, so you haven’t been signed in.</p>
-        <p className="mt-3">Log in with your email and password, or create an account.</p>
-      </Dialog>
+      <OrDivider>or use your email</OrDivider>
     </>
   )
 }
@@ -192,39 +159,62 @@ function OrDivider({ children = 'or' }: { children?: ReactNode }) {
   )
 }
 
-/** The demo shortcut, set apart from the real sign-in options so it is never mistaken for one. */
-function DemoAccounts({ busy, onUse }: { busy: boolean; onUse: (who: 'maria' | 'paolo') => void }) {
+/** Sample accounts for the prototype: a small, collapsed section under the form, apart from the real sign-in. */
+function SampleAccounts({ busy, onUse }: { busy: boolean; onUse: (a: (typeof SAMPLE_ACCOUNTS)[number]) => void }) {
+  const [open, setOpen] = useState(false)
   return (
-    <section className="mt-6 rounded-2xl border border-dashed border-line-strong bg-surface-muted/60 p-4" aria-labelledby="demo-title">
-      <p id="demo-title" className="flex items-center gap-2 text-sm font-semibold text-ink">
-        Try it with a sample account
-      </p>
-      <p className="mt-1 text-xs text-ink-2">Sign in as one of our sample customers in one tap.</p>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <Button variant="secondary" disabled={busy} onClick={() => onUse('maria')}>
-          Use sample account
-        </Button>
-        <Button variant="ghost" disabled={busy} onClick={() => onUse('paolo')}>
-          New customer (Paolo)
-        </Button>
-      </div>
+    <section className="mt-6 rounded-2xl border border-line" aria-label="Sample accounts">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls="sample-accounts"
+        className="flex min-h-11 w-full items-center justify-between gap-3 rounded-2xl px-4 py-2.5 text-left text-sm font-semibold text-ink-2 hover:text-ink"
+      >
+        Sample accounts
+        <ChevronDown className={`size-4 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
+      </button>
+      {open && (
+        <ul id="sample-accounts" className="grid gap-1 px-2 pb-2">
+          {SAMPLE_ACCOUNTS.map((a) => (
+            <li key={a.email}>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => onUse(a)}
+                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left text-sm hover:bg-surface-muted disabled:opacity-60"
+              >
+                <span className="font-medium text-ink">{a.label}</span>
+                <span className="text-xs text-ink-3">{a.role}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   )
 }
 
 /* ------------------------------------------------------------------ Log in */
 
+/**
+ * The one login for customers, staff and admins. The account decides where it lands: customers on the customer
+ * site, staff and admins in the staff portal. Someone already signed in goes straight to their own workspace.
+ */
 export function Login() {
-  const login = useCustomer((s) => s.login)
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const next = safeNext(params.get('next'))
+  const { pathname } = useLocation()
+  const workspace = useWorkspace()
+  const rawNext = params.get('next')
+  const staffEntry = pathname.startsWith('/admin') || !!rawNext?.startsWith('/admin')
   const [email, setEmail] = useState(params.get('email') ?? '')
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
   const [errors, setErrors] = useState({ email: '', password: '' })
   const [formError, setFormError] = useState('')
   const [busy, setBusy] = useState(false)
+  const done = useRef(false)
 
   const submit = async (e?: FormEvent, creds = { email, password }) => {
     e?.preventDefault()
@@ -234,27 +224,23 @@ export function Login() {
     if (errs.email || errs.password) return
     setBusy(true)
     await sleep(450)
-    const r = login(creds.email, creds.password)
+    const r = signIn(creds.email, creds.password)
     setBusy(false)
     if (!r.ok) return setFormError(r.error)
-    navigate(next, { replace: true })
+    done.current = true
+    navigate(destinationFor(r.workspace, rawNext), { replace: true })
   }
 
-  const useDemo = (who: 'maria' | 'paolo') => {
-    const creds = who === 'maria' ? DEMO_CUSTOMER : NEW_CUSTOMER
-    setEmail(creds.email)
-    setPassword(creds.password)
-    submit(undefined, creds)
-  }
+  if (workspace && !done.current && !busy) return <Navigate to={workspaceHome(workspace)} replace />
 
   return (
     <AuthLayout
-      title="Welcome back"
-      subtitle="Log in to book trips, pay and track your bookings."
+      title={staffEntry ? 'Staff login' : 'Welcome back'}
+      subtitle={staffEntry ? 'Log in with your work email to open the staff portal.' : 'Log in to book trips, pay and track your bookings.'}
       footer={
         <>
           New to TAMS AP?{' '}
-          <Link to={`/app/signup?next=${encodeURIComponent(next)}`} className="font-semibold text-brand-700 hover:underline">
+          <Link to={`/app/signup?next=${encodeURIComponent(safeNext(rawNext))}`} className="font-semibold text-brand-700 hover:underline">
             Create an account
           </Link>
           <span className="mx-2 text-ink-3" aria-hidden>
@@ -266,9 +252,9 @@ export function Login() {
         </>
       }
     >
-      <ContinueContext next={next} />
-      <GoogleSignIn next={next} label="Continue with Google" />
-      <OrDivider>or log in with email</OrDivider>
+      {params.has('next') && staffEntry && <p className="mb-5 rounded-xl bg-info-bg px-3.5 py-2.5 text-sm text-info">Please log in with a staff account to continue.</p>}
+      <ContinueContext next={safeNext(rawNext)} />
+      {!staffEntry && <GoogleSignIn next={safeNext(rawNext)} label="Continue with Google" />}
       <form onSubmit={submit} noValidate className="space-y-4" aria-busy={busy}>
         <TextField
           label="Email"
@@ -307,7 +293,14 @@ export function Login() {
           {busy ? 'Logging in…' : 'Log in'}
         </Button>
       </form>
-      <DemoAccounts busy={busy} onUse={useDemo} />
+      <SampleAccounts
+        busy={busy}
+        onUse={(a) => {
+          setEmail(a.email)
+          setPassword(a.password)
+          submit(undefined, a)
+        }}
+      />
     </AuthLayout>
   )
 }
@@ -372,7 +365,6 @@ export function Signup() {
     >
       <ContinueContext next={next} />
       <GoogleSignIn next={next} label="Sign up with Google" />
-      <OrDivider>or sign up with email</OrDivider>
       <form onSubmit={submit} noValidate className="space-y-4" aria-busy={busy}>
         <TextField label="Full name" autoComplete="name" icon={<UserRound className="size-5" />} {...field('name')} />
         <TextField label="Email" type="email" autoComplete="email" icon={<Mail className="size-5" />} placeholder="name@example.com" {...field('email')} />

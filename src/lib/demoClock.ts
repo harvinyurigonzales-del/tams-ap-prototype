@@ -1,5 +1,5 @@
 // One clock for the whole prototype. "Today" is the current date in Asia/Manila, read once when the app loads,
-// and every time of day is the demo's fixed 9:30 AM. Business logic never reads the real clock directly.
+// and every time of day counts on from the demo's fixed 9:30 AM. Business logic never reads the real clock directly.
 //
 // The sample data was written around SEED_TODAY. At load it is moved forward in whole weeks (so weekend tours
 // stay on weekends) to sit just before today, which keeps departures, promos and history useful on any date.
@@ -50,24 +50,33 @@ export const dateOf = (iso: string) => iso.slice(0, 10)
 /** Overlap of two inclusive day ranges. */
 export const overlaps = (a1: string, a2: string, b1: string, b2: string) => a1 <= b2 && b1 <= a2
 
-const ticks = { customer: 0, admin: 0 }
-const BASE_MINUTE = { customer: 9 * 60 + 30, admin: 9 * 60 + 40 }
+let ticks = 0
+const BASE_MINUTE = 9 * 60 + 30
 
 /**
  * Timestamp for an action taken during the demo: the fixed demo time plus one minute per action, so order is kept.
- * Customer actions start at 9:31 AM; admin actions start at 9:41 AM, after the pre-seeded 9:31–9:32 scenario records.
+ * Customer and staff actions share one sequence, so a reply always lands after the message it answers.
  */
-export function demoNowStamp(side: 'customer' | 'admin' = 'customer'): string {
-  ticks[side] += 1
-  const total = BASE_MINUTE[side] + ticks[side]
-  const hh = String(Math.min(23, Math.floor(total / 60))).padStart(2, '0')
+export function demoNowStamp(): string {
+  ticks += 1
+  const total = Math.min(24 * 60 - 1, BASE_MINUTE + ticks)
+  const hh = String(Math.floor(total / 60)).padStart(2, '0')
   const mm = String(total % 60).padStart(2, '0')
   return `${DEMO_TODAY}T${hh}:${mm}:00+08:00`
 }
 
-export function resetDemoClock(side?: 'customer' | 'admin') {
-  if (!side || side === 'customer') ticks.customer = 0
-  if (!side || side === 'admin') ticks.admin = 0
+/** Continues the sequence after the latest action saved for today, so reloading never reuses a time. */
+export function primeDemoClock(stamps: string[]) {
+  for (const st of stamps) {
+    if (!st?.startsWith(DEMO_TODAY)) continue
+    const m = /T(\d{2}):(\d{2})/.exec(st)
+    if (!m) continue
+    ticks = Math.max(ticks, +m[1] * 60 + +m[2] - BASE_MINUTE)
+  }
+}
+
+export function resetDemoClock() {
+  ticks = 0
 }
 
 /** Whole weeks the sample data moves forward so its "today" lands on or up to six days before DEMO_TODAY. */

@@ -1,9 +1,9 @@
 import { BadgeCheck, Lightbulb, MessageSquareReply, PenLine, Star } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { catalogTours } from '../../domain/recommend'
-import { ratingFor, ratingOf, reviewEligibility, validateReview, type ReviewSort } from '../../domain/reviews'
-import { fmtDate } from '../../lib/format'
+import { ratingFor, ratingOf, reviewedTrips, reviewEligibility, validateReview, type ReviewSort } from '../../domain/reviews'
+import { fmtDate, fmtRange } from '../../lib/format'
 import { useCustomer } from '../../state/customerStore'
 import { useUi } from '../../state/ui'
 import type { Booking, Review } from '../../seed/types'
@@ -227,8 +227,9 @@ export function ReviewCard({ review: r, showTour = true }: { review: Review; sho
           <span className="sr-only">{r.rating} out of 5 stars</span>
         </span>
       </header>
-      <h3 className="mt-3 type-head text-[18px] text-charcoal">{r.title}</h3>
-      <p className="mt-1.5 text-[15px] leading-relaxed text-ink">{r.text}</p>
+      {r.title && <h3 className="mt-3 type-head text-[18px] text-charcoal">{r.title}</h3>}
+      {r.text && <p className={`${r.title ? 'mt-1.5' : 'mt-3'} text-[15px] leading-relaxed text-ink`}>{r.text}</p>}
+      {!r.title && !r.text && <p className="mt-3 text-sm text-ink-2">Rated {r.rating} out of 5 stars.</p>}
       {r.suggestion && (
         <div className="mt-3 flex gap-2.5 rounded-xl bg-surface-muted px-4 py-3 text-sm">
           <Lightbulb className="mt-0.5 size-4 shrink-0 text-sili" aria-hidden />
@@ -249,51 +250,94 @@ export function ReviewCard({ review: r, showTour = true }: { review: Review; sho
       {showTour && s && (
         <p className="mt-4 border-t border-line pt-3 text-xs text-ink-2">
           Trip:{' '}
-          <Link to={`/app/tours/${s.id}`} className="font-semibold text-brand-700 hover:underline">
-            {s.name}
-          </Link>
+          {s.type === 'tour' ? (
+            <Link to={`/app/tours/${s.id}`} className="font-semibold text-brand-700 hover:underline">
+              {s.name}
+            </Link>
+          ) : (
+            <span className="font-semibold text-ink">{data.bookings.find((b) => b.id === r.bookingId)?.label ?? s.name}</span>
+          )}
         </p>
       )}
     </article>
   )
 }
 
-/** The "rate your trip" card. What it shows depends on whether the person has a completed trip to rate. */
+const tripName = (d: ReturnType<typeof useCustomer.getState>['data'], b: Booking) => b.label ?? d.services.find((s) => s.id === b.serviceId)?.name ?? 'Your trip'
+
+/**
+ * "Trips you can review": the signed-in customer's completed trips without a review, each with its package,
+ * dates and booking reference, so they can pick the one to rate. Trips already rated are listed below it.
+ * A link with ?trip=BK-… (from a notification or the booking page) opens that trip's form straight away.
+ */
 function RateCard() {
   const data = useCustomer((s) => s.data)
   const customerId = useCustomer((s) => s.customerId)
   const loc = useLocation()
-  const [writing, setWriting] = useState<string | null>(null)
+  const [params] = useSearchParams()
   const el = reviewEligibility(data, customerId)
+  const asked = params.get('trip')
+  const [writing, setWriting] = useState<string | null>(() => (el.ok && asked && el.trips.some((b) => b.id === asked) ? asked : el.ok && el.trips.length === 1 ? el.trips[0].id : null))
+  const done = reviewedTrips(data, customerId)
+  // Coming from "Rate your trip" or a notification: bring the form into view.
+  useEffect(() => {
+    if (asked) document.getElementById('rate')?.scrollIntoView({ block: 'start' })
+  }, [asked])
   const box = 'rounded-[20px] bg-brand-600 p-5 text-white sm:p-6'
+
+  const reviewed = done.length > 0 && (
+    <div className="mt-4 rounded-2xl bg-white/10 p-4">
+      <h3 className="text-sm font-semibold">Trips you reviewed</h3>
+      <ul className="mt-2 space-y-1.5">
+        {done.map(({ booking: b, review }) => (
+          <li key={b.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
+            <span className="min-w-0">
+              <span className="font-semibold">{tripName(data, b)}</span>
+              <span className="text-white/80">
+                {' '}
+                · {fmtRange(b.startDate, b.endDate)} · {b.id}
+              </span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-0.5 text-xs font-semibold text-ink">
+              <Stars value={review.rating} size="xs" /> Reviewed
+              <span className="sr-only">, {review.rating} out of 5 stars</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
 
   if (!el.ok) {
     const copy = {
       guest: { title: 'Travelled with us?', body: 'Log in to rate a trip you completed with TAMS AP.', action: <LinkButton to={`/app/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} variant="secondary">Log in to rate</LinkButton> },
       'no-trips': {
         title: 'You can rate after your first trip',
-        body: 'Reviews are open to travellers with a completed TAMS AP trip. It keeps ratings honest and free of trolls.',
+        body: 'Once staff mark one of your trips completed, it shows up here so you can rate it.',
         action: <LinkButton to="/app/explore" variant="secondary">Find a trip</LinkButton>,
       },
-      'all-reviewed': { title: 'Salamat sa review!', body: 'You have rated every trip you completed with us. Your next trip will show up here after you travel.', action: null },
+      'all-reviewed': { title: 'Salamat sa review!', body: 'You have rated every trip you completed with us. Your next completed trip will show up here.', action: null },
     }[el.reason]
     return (
-      <section className={box} aria-labelledby="rate-title">
+      <section id="rate" className={box} aria-labelledby="rate-title">
         <h2 id="rate-title" className="type-head text-[22px]">
           {copy.title}
         </h2>
         <p className="mt-1 max-w-lg text-sm text-white/85">{copy.body}</p>
         {copy.action && <div className="mt-4">{copy.action}</div>}
+        {reviewed}
       </section>
     )
   }
 
   return (
-    <section className={box} aria-labelledby="rate-title">
+    <section id="rate" className={box} aria-labelledby="rate-title">
       <h2 id="rate-title" className="type-head text-[22px]">
-        How was your trip?
+        Trips you can review
       </h2>
-      <p className="mt-1 text-sm text-white/85">Your rating and comment are public. Suggestions go to our team too.</p>
+      <p className="mt-1 text-sm text-white/85">
+        {el.trips.length > 1 ? `You have ${el.trips.length} completed trips to rate. Choose one to start.` : 'Only the star rating is needed. A comment is welcome but optional.'}
+      </p>
       <ul className="mt-4 space-y-2">
         {el.trips.map((b) => (
           <li key={b.id}>
@@ -301,11 +345,13 @@ function RateCard() {
               <ReviewForm booking={b} onDone={() => setWriting(null)} />
             ) : (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white/10 px-4 py-3">
-                <p className="text-sm">
-                  <span className="font-semibold">{data.services.find((s) => s.id === b.serviceId)?.name}</span>
-                  <span className="text-white/80"> · {fmtDate(b.startDate, { year: false })}</span>
+                <p className="min-w-0 text-sm">
+                  <span className="block font-semibold">{tripName(data, b)}</span>
+                  <span className="text-white/80">
+                    {fmtRange(b.startDate, b.endDate)} · Ref {b.id}
+                  </span>
                 </p>
-                <Button variant="secondary" icon={<PenLine className="size-4" aria-hidden />} onClick={() => setWriting(b.id)}>
+                <Button variant="secondary" icon={<PenLine className="size-4" aria-hidden />} onClick={() => setWriting(b.id)} aria-label={`Rate ${tripName(data, b)}, ${b.id}`}>
                   Rate this trip
                 </Button>
               </div>
@@ -313,6 +359,7 @@ function RateCard() {
           </li>
         ))}
       </ul>
+      {reviewed}
     </section>
   )
 }
@@ -329,44 +376,48 @@ function ReviewForm({ booking, onDone }: { booking: Booking; onDone: () => void 
   const [text, setText] = useState('')
   const [suggestion, setSuggestion] = useState('')
   const [party, setParty] = useState<Review['party'] | ''>('')
+  const [more, setMore] = useState(false)
   const [errors, setErrors] = useState<ReturnType<typeof validateReview>>({})
-  const name = data.services.find((s) => s.id === booking.serviceId)?.name
   const shown = hover || rating
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
-    const errs = validateReview({ rating, title, text })
+    const errs = validateReview({ rating, title, text, suggestion })
     setErrors(errs)
     if (Object.keys(errs).length) return
     const r = submitReview({ bookingId: booking.id, rating, title, text, suggestion, party: party || undefined })
     if (!r.ok) {
-      toast(r.error)
+      toast(r.error, 'error')
       return
     }
-    toast('Thanks! Your review is now public.')
+    toast('Thanks! Your review is posted.')
     onDone()
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4 rounded-2xl bg-surface p-5 text-ink" noValidate>
+    <form onSubmit={submit} className="space-y-4 rounded-2xl bg-surface p-5 text-ink" noValidate aria-label={`Review ${tripName(data, booking)}`}>
       <p className="text-sm text-ink-2">
-        Rating <span className="font-semibold text-ink">{name}</span>, {fmtDate(booking.startDate, { year: false })}
+        Rating <span className="font-semibold text-ink">{tripName(data, booking)}</span>, {fmtRange(booking.startDate, booking.endDate)} · Ref {booking.id}
       </p>
       <fieldset>
-        <legend className="mb-1.5 text-sm font-medium text-ink">Your rating</legend>
-        <div className="flex items-center gap-3" onMouseLeave={() => setHover(0)}>
-          <div className="flex gap-1">
+        <legend className="mb-1.5 text-sm font-medium text-ink">
+          Your rating <span className="text-bad">*</span>
+        </legend>
+        <div className="flex flex-wrap items-center gap-x-3" onMouseLeave={() => setHover(0)}>
+          <div className="flex" role="radiogroup" aria-label="Star rating" aria-required="true">
             {[1, 2, 3, 4, 5].map((n) => (
-              <label key={n} className="cursor-pointer" onMouseEnter={() => setHover(n)}>
-                <input type="radio" name="rating" value={n} checked={rating === n} onChange={() => setRating(n)} className="peer sr-only" />
+              <label key={n} className="cursor-pointer rounded-lg p-1.5" onMouseEnter={() => setHover(n)}>
+                <input type="radio" name={`rating-${booking.id}`} value={n} checked={rating === n} onChange={() => setRating(n)} className="peer sr-only" />
                 <span className="sr-only">
                   {n} {n === 1 ? 'star' : 'stars'}, {LABELS[n]}
                 </span>
-                <Star className={`size-8 rounded peer-focus-visible:outline-2 peer-focus-visible:outline-brand-600 ${n <= shown ? 'text-star' : 'text-line-strong'}`} fill="currentColor" strokeWidth={0} aria-hidden />
+                <Star className={`size-8 rounded peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand-600 ${n <= shown ? 'text-star' : 'text-line-strong'}`} fill="currentColor" strokeWidth={0} aria-hidden />
               </label>
             ))}
           </div>
-          <span className="text-sm font-semibold text-ink-2">{LABELS[shown]}</span>
+          <span className="text-sm font-semibold text-ink-2" aria-live="polite">
+            {LABELS[shown]}
+          </span>
         </div>
         {errors.rating && (
           <p role="alert" className="mt-1.5 text-xs font-medium text-bad">
@@ -374,28 +425,43 @@ function ReviewForm({ booking, onDone }: { booking: Booking; onDone: () => void 
           </p>
         )}
       </fieldset>
-      <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Sum up your trip in a few words" maxLength={80} error={errors.title} />
-      <TextArea label="Your review" value={text} onChange={(e) => setText(e.target.value)} placeholder="What did you enjoy? How were the pickup, van, guide and stops?" error={errors.text} />
       <TextArea
-        label="Suggestion for TAMS AP (optional)"
-        value={suggestion}
-        onChange={(e) => setSuggestion(e.target.value)}
-        placeholder="Anything we could do better next time?"
-        hint="Shown with your review so other travellers can see we listen."
-        className="min-h-20"
+        label="Comment (optional)"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="What did you enjoy? How were the pickup, van, guide and stops?"
+        error={errors.text}
+        maxLength={1000}
       />
-      <Select label="Who did you travel with? (optional)" value={party} onChange={(e) => setParty(e.target.value as Review['party'] | '')}>
-        <option value="">Prefer not to say</option>
-        {PARTIES.map((p) => (
-          <option key={p} value={p}>
-            {p}
-          </option>
-        ))}
-      </Select>
+      {more ? (
+        <>
+          <TextField label="Title (optional)" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Sum up your trip in a few words" maxLength={80} error={errors.title} />
+          <TextArea
+            label="Suggestion for TAMS AP (optional)"
+            value={suggestion}
+            onChange={(e) => setSuggestion(e.target.value)}
+            placeholder="Anything we could do better next time?"
+            hint="Shown with your review so other travellers can see we listen."
+            className="min-h-20"
+            maxLength={500}
+            error={errors.suggestion}
+          />
+          <Select label="Who did you travel with? (optional)" value={party} onChange={(e) => setParty(e.target.value as Review['party'] | '')}>
+            <option value="">Prefer not to say</option>
+            {PARTIES.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </Select>
+        </>
+      ) : (
+        <button type="button" onClick={() => setMore(true)} className="text-sm font-semibold text-brand-700 hover:underline">
+          Add a title, suggestion or who you travelled with
+        </button>
+      )}
       <div className="flex flex-wrap gap-2">
-        <Button type="submit">
-          Post review
-        </Button>
+        <Button type="submit">Post review</Button>
         <Button variant="ghost" onClick={onDone}>
           Cancel
         </Button>

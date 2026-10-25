@@ -121,6 +121,7 @@ export interface Booking {
   cancelReason?: string
   cancelledAt?: string
   confirmedAt?: string
+  completedAt?: string
   cancellationRequested?: boolean
   scenario?: string
   /** Set when the booking was created by accepting a custom-trip proposal or a rental quote. */
@@ -211,7 +212,10 @@ export interface AppNotification {
   body: string
   link?: string
   read: boolean
+  /** Set on customer notifications: who receives it. Staff notifications have none. */
   customerId?: string
+  /** Staff notifications about a customer's activity, so that customer's records can be cleared with it. */
+  about?: string
   scenario?: string
   origin: Origin
 }

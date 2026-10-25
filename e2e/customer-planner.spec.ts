@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures'
+import { expect, test, signInSample } from './fixtures'
 
 // The trip planner: sample trip, editing with lock and undo, and a request that survives logging in.
 
@@ -40,7 +40,7 @@ test('sample trip goes from questions to an editable plan and a sent request', a
   await page.getByRole('button', { name: 'Review trip request' }).last().click()
   await expect(page.getByRole('heading', { name: 'Review your trip request' })).toBeVisible()
   await page.getByRole('button', { name: 'Log in to send' }).click()
-  await page.getByRole('button', { name: 'Use sample account' }).click()
+  await signInSample(page, 'Maria Santos')
   await expect(page.getByRole('heading', { name: 'Review your trip request' })).toBeVisible()
   await expect(page.getByText('Kabsat Cafe', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Send trip request' }).click()

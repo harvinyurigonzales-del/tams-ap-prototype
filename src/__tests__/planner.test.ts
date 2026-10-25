@@ -3,7 +3,7 @@ import {
   addAttraction, addCustomStop, buildPlan, budgetOf, checkPlan, emptyAnswers, estimate, moveStop, quickAction, rankDestinations, refitDays,
   removeStop, sampleAnswers, schedule, suggestAnother, toggleLock, validateQuestion, whyItFits, type PlannerAnswers, type TripPlan,
 } from '../domain/planner/engine'
-import { customerSeed } from '../seed/derive'
+import { customerFixture as customerSeed } from './fixtures'
 
 const catalog = customerSeed().destinations
 const dest = (id: string) => catalog.find((d) => d.id === id)!

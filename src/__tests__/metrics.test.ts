@@ -1,11 +1,14 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { bookingReport, bookingsPerWeek, dashboard, performanceReport, PERIODS, revenueReport, statusCounts } from '../domain/metrics'
 import { assignableTargets, departureAvailability, driverConflict, vehicleConflict } from '../domain/rules'
 import { resetDemoClock } from '../lib/demoClock'
-import { adminSeed, customerSeed } from '../seed/derive'
-import { useAdmin } from '../state/adminStore'
+import { adminFixture as adminSeed, customerFixture as customerSeed } from './fixtures'
+import { DEMO_STAFF, staffNotifications, useAdmin } from '../state/adminStore'
 import { DEMO_CUSTOMER, useCustomer } from '../state/customerStore'
-import { resetAll } from '../state/demo'
+import { resetAll, resetMaria } from '../state/demo'
+import { reviewEligibility, ratingFor } from '../domain/reviews'
+import { MARIA_ID } from '../seed/derive'
+import { startSync } from '../state/sync'
 
 const [OCT, SEP] = PERIODS
 
@@ -58,50 +61,75 @@ describe('seeded figures (spec section 9)', () => {
   })
 })
 
-describe('demo scripts', () => {
+describe('shared journey: Maria books, staff complete the trip, Maria rates it', () => {
+  beforeAll(() => startSync())
   beforeEach(() => {
     resetAll()
     resetDemoClock()
   })
 
-  it('customer walkthrough C3–C9 recreates BK-2026-0148 and PAY-2026-0192', () => {
-    const c = useCustomer.getState()
-    expect(c.login(DEMO_CUSTOMER.email, 'wrong').ok).toBe(false)
-    expect(c.login(DEMO_CUSTOMER.email, DEMO_CUSTOMER.password).ok).toBe(true)
-    const b = useCustomer.getState().createBooking({ serviceId: 'SVC-BAG', departureId: 'DEP-BAG-1017', pax: 2, contactName: 'Maria Santos', contactMobile: '0900 555 0101' })
-    if (!b.ok) throw new Error(b.error)
-    expect(b.value).toMatchObject({ id: 'BK-2026-0148', total: 4998, status: 'Pending', createdAt: '2026-10-08T09:31:00+08:00' })
-    const p = useCustomer.getState().submitPayment({ bookingId: b.value.id, method: 'GCash', type: 'Down payment', reference: '1009 8822 5531', proof: 'sample' })
-    if (!p.ok) throw new Error(p.error)
-    expect(p.value).toMatchObject({ id: 'PAY-2026-0192', amount: 2499, status: 'Submitted', submittedAt: '2026-10-08T09:32:00+08:00' })
-    const seeded = adminSeed()
-    const { origin: _o1, ...live } = b.value
-    const { origin: _o2, scenario: _s, ...pre } = seeded.bookings.find((x) => x.id === 'BK-2026-0148')!
-    expect({ ...live, notes: undefined }).toEqual({ ...pre, notes: undefined })
-    const dep = useCustomer.getState().data.departures.find((x) => x.id === 'DEP-BAG-1017')!
-    expect(departureAvailability(dep, useCustomer.getState().data.bookings).left).toBe(6)
-    // The admin demo never receives the customer's data.
-    expect(useAdmin.getState().data.bookings.find((x) => x.id === 'BK-2026-0148')?.origin).toBe('seed')
+  const signInMaria = () => expect(useCustomer.getState().login(DEMO_CUSTOMER.email, DEMO_CUSTOMER.password).ok).toBe(true)
+
+  it('starts Maria with no trips, requests, reviews or notifications', () => {
+    signInMaria()
+    const d = useCustomer.getState().data
+    expect(d.bookings.filter((b) => b.customerId === MARIA_ID)).toEqual([])
+    expect(d.notifications.filter((n) => n.customerId === MARIA_ID)).toEqual([])
+    expect(reviewEligibility(d, MARIA_ID)).toMatchObject({ ok: false })
   })
 
-  it('admin walkthrough A6–A11 moves the figures as scripted', () => {
-    const a = useAdmin.getState()
-    expect(a.confirmBooking('BK-2026-0148').ok).toBe(false)
-    expect(a.verifyPayment('PAY-2026-0192').ok).toBe(true)
-    expect(useAdmin.getState().confirmBooking('BK-2026-0148').ok).toBe(true)
-    expect(useAdmin.getState().assign({ kind: 'booking', id: 'BK-2026-0130' }, 'VAN-01', 'DRV-03')).toMatchObject({ ok: false })
-    expect(useAdmin.getState().assign({ kind: 'booking', id: 'BK-2026-0130' }, 'VAN-04', 'DRV-03').ok).toBe(true)
+  it('a customer booking reaches staff, and staff updates reach the customer', () => {
+    signInMaria()
+    const b = useCustomer.getState().createBooking({ serviceId: 'SVC-BAG', departureId: 'DEP-BAG-1017', pax: 2, contactName: 'Maria Santos', contactMobile: '0900 555 0101' })
+    if (!b.ok) throw new Error(b.error)
+    expect(b.value).toMatchObject({ total: 4998, status: 'Pending', customerId: MARIA_ID })
+    // The staff portal holds the same record, and staff are told about it.
+    expect(useAdmin.getState().data.bookings.find((x) => x.id === b.value.id)?.status).toBe('Pending')
+    expect(staffNotifications(useAdmin.getState().data).some((n) => n.about === MARIA_ID)).toBe(true)
+
+    const p = useCustomer.getState().submitPayment({ bookingId: b.value.id, method: 'GCash', type: 'Full', reference: '1009 8822 5531', proof: 'sample' })
+    if (!p.ok) throw new Error(p.error)
+    expect(useAdmin.getState().data.payments.find((x) => x.id === p.value.id)?.status).toBe('Submitted')
+
+    expect(useAdmin.getState().verifyPayment(p.value.id).ok).toBe(true)
+    const mine = () => useCustomer.getState().data.notifications.filter((n) => n.customerId === MARIA_ID)
+    expect(mine().some((n) => /verified/i.test(n.title) && !n.read)).toBe(true)
+    if (useAdmin.getState().data.bookings.find((x) => x.id === b.value.id)!.status === 'Pending') expect(useAdmin.getState().confirmBooking(b.value.id).ok).toBe(true)
+    expect(useCustomer.getState().data.bookings.find((x) => x.id === b.value.id)?.status).toBe('Confirmed')
+
+    // Not reviewable until staff mark it completed.
+    expect(reviewEligibility(useCustomer.getState().data, MARIA_ID)).toMatchObject({ ok: false })
+    expect(useAdmin.getState().completeBooking(b.value.id).ok).toBe(true)
+    const done = mine().find((n) => n.title === 'Trip completed')!
+    expect(done.link).toBe(`/app/reviews?trip=${b.value.id}`)
+    const elig = reviewEligibility(useCustomer.getState().data, MARIA_ID)
+    expect(elig.ok && elig.trips.map((x) => x.id)).toEqual([b.value.id])
+
+    // A star rating alone is a complete review, and it counts once.
+    const before = ratingFor(useCustomer.getState().data, 'SVC-BAG').count
+    expect(useCustomer.getState().submitReview({ bookingId: b.value.id, rating: 4 }).ok).toBe(true)
+    expect(useCustomer.getState().submitReview({ bookingId: b.value.id, rating: 5 }).ok).toBe(false)
+    expect(ratingFor(useAdmin.getState().data, 'SVC-BAG').count).toBe(before + 1)
+    expect(reviewEligibility(useCustomer.getState().data, MARIA_ID)).toEqual({ ok: false, reason: 'all-reviewed' })
+
+    // Signing out and in as staff and back keeps every record.
+    useCustomer.getState().logout()
+    expect(useAdmin.getState().login(DEMO_STAFF.email, DEMO_STAFF.password).ok).toBe(true)
+    useAdmin.getState().logout()
+    signInMaria()
+    expect(useCustomer.getState().data.bookings.find((x) => x.id === b.value.id)?.status).toBe('Completed')
+  })
+
+  it('resetting Maria clears only her records', () => {
+    signInMaria()
+    const b = useCustomer.getState().createBooking({ serviceId: 'SVC-BAG', departureId: 'DEP-BAG-1017', pax: 2, contactName: 'Maria Santos', contactMobile: '0900 555 0101' })
+    if (!b.ok) throw new Error(b.error)
+    const others = useAdmin.getState().data.bookings.filter((x) => x.customerId !== MARIA_ID)
+    resetMaria()
     const d = useAdmin.getState().data
-    const k = dashboard(d)
-    expect(k.collections).toBe(27591)
-    expect(k.outstanding).toBe(29195)
-    expect(k.toVerify).toBe(0)
-    expect(k.needsAssignment).toBe(1)
-    expect(statusCounts(d)).toMatchObject({ Pending: 1, Confirmed: 10 })
-    const perf = performanceReport(d, OCT)
-    expect(perf.filled).toBe(31)
-    const bag17 = perf.rows.find((r) => r.departure.id === 'DEP-BAG-1017')!
-    expect([bag17.filled, bag17.capacity]).toEqual([6, 12])
+    expect(d.bookings.filter((x) => x.customerId === MARIA_ID)).toEqual([])
+    expect(d.bookings.filter((x) => x.customerId !== MARIA_ID)).toEqual(others)
+    expect(useCustomer.getState().data).toBe(d)
   })
 
   it('admin lockout after five wrong passwords', () => {

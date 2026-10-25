@@ -79,8 +79,9 @@ export function Account() {
         body="You can log back in any time to see your trips."
         confirmLabel="Log out"
         onConfirm={() => {
+          // Leave first, so the account page never bounces to the login page on the way out.
+          navigate('/app', { replace: true })
           logout()
-          navigate('/app/login', { replace: true })
         }}
       />
     </div>

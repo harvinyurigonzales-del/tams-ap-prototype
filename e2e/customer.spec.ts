@@ -1,70 +1,57 @@
-import { expect, test } from './fixtures'
+import { expect, signInSample, test } from './fixtures'
 
-test('customer walkthrough C1–C10', async ({ page }) => {
+test('guest lands on Home, Maria starts clean, and books and pays a tour', async ({ page }) => {
+  // No start screen: the site opens on the customer Home page.
   await page.goto('/')
-  await page.getByRole('link', { name: /Customer demo/ }).click()
   await expect(page).toHaveURL(/\/app$/)
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+
   await page.goto('/app/login')
+  await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible()
   await page.getByRole('button', { name: 'Log in', exact: true }).click()
   await expect(page.getByText('Enter your email address.')).toBeVisible()
   await page.getByLabel('Email').fill('maria.santos@example.com')
   await page.getByLabel('Password', { exact: true }).fill('wrong-password')
   await page.getByRole('button', { name: 'Log in', exact: true }).click()
   await expect(page.getByText('Email or password is incorrect.')).toBeVisible()
-  await page.getByRole('button', { name: 'Use sample account' }).click()
+  await signInSample(page, 'Maria Santos')
+  await expect(page).toHaveURL(/\/app$/)
   await expect(page.getByText('Hello, Maria')).toBeVisible()
-  // The featured promo tour shows its date and seats; other cards show their next open departure.
-  await expect(page.getByText('8 seats left').first()).toBeVisible()
-  await expect(page.getByText('12 seats left').first()).toBeVisible()
 
+  // A clean start: no trips and no notifications.
+  await expect(page.getByRole('button', { name: 'Notifications', exact: true })).toBeVisible()
   const nav = page.getByRole('navigation', { name: 'Main' }).last()
   await nav.getByRole('link', { name: 'My Trips' }).click()
-  await expect(page.getByRole('heading', { name: 'Past' })).toBeVisible()
-  await expect(page.getByText('Tagaytay Day Tour').first()).toBeVisible()
+  await expect(page.getByText('No bookings yet')).toBeVisible()
 
-  // In-app navigation only: a full page load would reset the in-memory demo.
   await nav.getByRole('link', { name: 'Explore' }).click()
   await page.getByRole('link', { name: 'Baguio Weekend Escape', exact: true }).click()
   await page.getByRole('link', { name: 'View dates' }).click()
   await expect(page.getByRole('heading', { name: 'October 2026' })).toBeVisible()
-  await page.getByRole('gridcell', { name: /Oct 10, 2026, Full/ }).click({ force: true })
-  await expect(page.getByText('Oct 10 is full.')).toBeVisible()
   await page.getByRole('gridcell', { name: /Oct 17, 2026, 8 left/ }).click()
-  await expect(page.getByText('₱200 off applied · Book by Oct 10')).toBeVisible()
   await page.getByRole('button', { name: 'Continue' }).click()
+  // Booking steps hide the bottom bar.
+  await expect(page.getByRole('navigation', { name: 'Main' }).last()).toBeHidden()
 
-  const add = page.getByRole('button', { name: 'Add a traveller' })
-  for (let i = 0; i < 7; i++) await add.click()
-  await expect(add).toBeDisabled()
-  await expect(page.getByText('Only 8 seats left on this date.')).toBeVisible()
-  for (let i = 0; i < 6; i++) await page.getByRole('button', { name: 'Remove a traveller' }).click()
+  await page.getByRole('button', { name: 'Add a traveller' }).click()
   await expect(page.getByText('₱4,998').first()).toBeVisible()
-  await expect(page.getByText('₱2,499').first()).toBeVisible()
   await page.getByRole('button', { name: 'Review booking' }).click()
   await page.getByRole('button', { name: 'Submit booking' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Submit booking' }).click()
   await expect(page.getByRole('heading', { name: 'Booking received' })).toBeVisible()
-  await expect(page.getByText('BK-2026-0148')).toBeVisible()
+  const ref = (await page.getByText(/BK-2026-\d{4}/).first().textContent())!.match(/BK-2026-\d{4}/)![0]
 
   await page.getByRole('link', { name: 'Pay now' }).click()
-  // The demo helper fills a GCash-shaped reference and a matching demo receipt, but never submits by itself.
   await page.getByRole('button', { name: 'Use sample payment details' }).click()
   await expect(page.getByLabel('Reference number')).toHaveValue(/^\d{4} \d{3} \d{6}$/)
-  await expect(page.getByText('demo-receipt.svg')).toBeVisible()
-  await expect(page.getByRole('dialog')).toHaveCount(0)
-  // Switching method swaps the generated reference for one in that method's format.
-  await page.getByText('Maya', { exact: true }).click()
-  await expect(page.getByLabel('Reference number')).toHaveValue(/^MY/)
   await page.getByRole('button', { name: 'Submit payment' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Submit payment' }).click()
   await expect(page.getByRole('heading', { name: 'Payment submitted' })).toBeVisible()
-  await expect(page.getByText('PAY-2026-0192')).toBeVisible()
   await page.getByRole('link', { name: 'Back to trip' }).click()
   await expect(page.getByText('Awaiting verification').first()).toBeVisible()
 
-  await nav.getByRole('link', { name: 'Explore' }).click()
-  await page.getByRole('link', { name: 'Baguio Weekend Escape', exact: true }).click()
-  await page.getByRole('link', { name: 'View dates' }).click()
-  await expect(page.getByRole('gridcell', { name: /Oct 17, 2026, 6 left/ })).toBeVisible()
-  await page.screenshot({ path: 'test-results/customer-dates.png', fullPage: true })
+  // The records survive a full reload.
+  await page.reload()
+  await expect(page.getByText(ref).first()).toBeVisible()
+  await expect(page.getByText('Awaiting verification').first()).toBeVisible()
 })
