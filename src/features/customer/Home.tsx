@@ -22,8 +22,9 @@ import { TRIP_DESK } from './Trips'
  */
 const HERO_SLIDES = ['DST-BANAUE', 'DST-VIGAN', 'DST-PAGUDPUD', 'DST-HUNDRED', 'DST-BAGUIO', 'DST-PINATUBO', 'DST-ZAMBALES', 'DST-INTRAMUROS', 'DST-TAGAYTAY', 'DST-BATANGAS']
 /** Time each photo shows, and the crossfade between them. */
-const SLIDE_MS = 1800
-const FADE_MS = 600
+const SLIDE_MS = 2000
+const FADE_MS = 1100
+const FADE_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
 /** The destination given the large storytelling feature: a real photo and a scheduled joiner tour. */
 const SPOTLIGHT_DESTINATION = 'DST-BAGUIO'
 
@@ -164,11 +165,21 @@ function Hero({ greeting }: { greeting?: string }) {
               loading="eager"
               fetchPriority={i === 0 ? 'high' : 'low'}
               decoding="async"
-              onLoad={() => setLoaded((s) => (s.has(i) ? s : new Set(s).add(i)))}
+              // Decoded before it counts as ready, so the fade never starts on a photo still being unpacked.
+              onLoad={(e) =>
+                e.currentTarget
+                  .decode()
+                  .catch(() => {})
+                  .then(() => setLoaded((s) => (s.has(i) ? s : new Set(s).add(i))))
+              }
               onError={() => setBroken((s) => (s.has(i) ? s : new Set(s).add(i)))}
-              style={{ objectPosition: dest.image.focus, transitionDuration: `${FADE_MS}ms` }}
-              className={`absolute inset-0 size-full object-cover saturate-[0.92] transition-opacity ease-in-out ${
-                i === index && loaded.has(i) ? 'z-[2] opacity-100' : i === prev ? 'z-[1] opacity-100 transition-none' : 'opacity-0 transition-none'
+              style={{
+                objectPosition: dest.image.focus,
+                willChange: 'opacity',
+                transition: i === index ? `opacity ${FADE_MS}ms ${FADE_EASE}` : 'none',
+              }}
+              className={`absolute inset-0 size-full object-cover saturate-[0.92] ${
+                i === index && loaded.has(i) ? 'z-[2] opacity-100' : i === prev ? 'z-[1] opacity-100' : 'opacity-0'
               }`}
             />
           ) : null,

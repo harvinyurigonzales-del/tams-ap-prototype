@@ -2,7 +2,7 @@ import { expect, test, signInSample } from './fixtures'
 
 // Second revision round: hero slideshow, looping carousels, floating assistant, sign-in page and demo helpers.
 
-test('hero photos crossfade about every 1.8 seconds behind steady text, and hold while the search is in use', async ({ page }) => {
+test('hero photos crossfade about every 2 seconds behind steady text, and hold while the search is in use', async ({ page }) => {
   await page.goto('/app')
   const frame = page.locator('[data-slide]')
   const title = await page.locator('#hero-title').textContent()
