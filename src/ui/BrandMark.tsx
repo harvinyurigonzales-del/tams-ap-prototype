@@ -1,20 +1,14 @@
-// Replaceable logo placeholder (spec section 8). No official TAMS AP logo is used or invented.
-// To use the real logo, replace this component and the files in public/icons.
-export function BrandMark({ compact = false, inverse = false }: { compact?: boolean; inverse?: boolean }) {
+// TAMS AP logo, Concept A ("Heritage, Refined"). Files live in public/brand; the app icons in public/icons
+// are rendered from the same artwork by `npm run icons`.
+export function BrandMark({ compact = false, inverse = false, className = '' }: { compact?: boolean; inverse?: boolean; className?: string }) {
+  if (compact) return <img src="/brand/tams-symbol.svg" alt="TAMS AP Travel and Tours" className={`${/(^|\s)h-/.test(className) ? '' : 'h-9'} w-auto ${className}`} />
   return (
-    <span className="inline-flex items-center gap-2.5" aria-label="TAMS AP Travel and Tours">
-      <span
-        aria-hidden
-        className={`grid size-9 shrink-0 place-items-center rounded-xl font-display text-sm font-bold ${inverse ? 'bg-white text-brand-700' : 'bg-brand-600 text-white'}`}
-      >
-        TA
-      </span>
-      {!compact && (
-        <span className="flex flex-col leading-none" aria-hidden>
-          <span className={`font-display text-base font-bold ${inverse ? 'text-white' : 'text-brand-900'}`}>TAMS AP</span>
-          <span className={`mt-1 text-[11px] font-semibold tracking-[0.08em] ${inverse ? 'text-brand-100' : 'text-brand-600'}`}>TRAVEL AND TOURS</span>
-        </span>
-      )}
-    </span>
+    <img
+      src={inverse ? '/brand/tams-horizontal-white.svg' : '/brand/tams-horizontal.svg'}
+      alt="TAMS AP Travel and Tours"
+      width={883}
+      height={269}
+      className={`${/(^|\s)h-/.test(className) ? '' : 'h-11'} w-auto ${className}`}
+    />
   )
 }

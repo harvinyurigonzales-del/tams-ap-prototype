@@ -12,10 +12,10 @@ async function loginAsMaria(page: Page) {
 
 test('guest plans a custom trip from a destination, logs in, and tracks it to a booking', async ({ page }) => {
   await page.goto('/app')
-  await expect(page.getByRole('heading', { name: 'Upcoming departures with open seats' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Leaving soon, with seats left' })).toBeVisible()
   await expect(page.getByRole('heading', { name: /Inspired by/ })).toHaveCount(0)
   await nav(page).getByRole('link', { name: 'Explore' }).click()
-  await page.getByRole('link', { name: /Destinations/ }).click()
+  await page.getByRole('button', { name: /^Destinations/ }).click()
   await page.getByRole('link', { name: 'Sagada', exact: true }).click()
   await expect(page.getByText('No open dates')).toBeVisible()
   await page.getByRole('link', { name: /Plan a custom trip here/ }).click()
@@ -55,7 +55,7 @@ test('seeded proposal, rental request with validation, and quote acceptance', as
   await expect(page.getByRole('button', { name: 'Accept proposal' })).toHaveCount(0)
 
   await nav(page).getByRole('link', { name: 'Explore' }).click()
-  await page.getByRole('link', { name: /Van rental/ }).click()
+  await page.getByRole('link', { name: /Van rental with driver/ }).click()
   await page.getByRole('link', { name: 'Request a van', exact: true }).click()
   await page.getByLabel('Pickup address or landmark').fill('Malolos Cathedral')
   await page.getByLabel('Destination province').selectOption('Outside Luzon')
@@ -127,13 +127,33 @@ test('old links redirect to the new routes', async ({ page }) => {
   await expect(page).toHaveURL(/\/app\/login\?next=%2Fapp%2Fmessages/)
 })
 
+test('only travellers with a completed trip can rate, and the review goes public', async ({ page }) => {
+  await page.goto('/app')
+  await nav(page).getByRole('link', { name: 'Reviews' }).click()
+  await expect(page.getByRole('heading', { name: 'Reviews from our travellers' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Log in to rate' })).toBeVisible()
+  await loginAsMaria(page)
+  await nav(page).getByRole('link', { name: 'Reviews' }).click()
+  await page.getByRole('button', { name: 'Rate this trip' }).click()
+  await page.getByRole('button', { name: 'Post review' }).click()
+  await expect(page.getByText('Choose a star rating.')).toBeVisible()
+  await page.getByText('5 stars, Excellent').click({ force: true })
+  await page.getByLabel('Title').fill('Taal in full view')
+  await page.getByLabel('Your review').fill('Pickup was on time and the lunch spot had the best view of the lake.')
+  await page.getByRole('button', { name: 'Post review' }).click()
+  await expect(page.getByText('Thanks! Your review is now public.')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Taal in full view' })).toBeVisible()
+  await expect(page.getByText('Your review', { exact: true }).first()).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Rate this trip' })).toHaveCount(0)
+})
+
 test.describe('desktop', () => {
   test.use({ viewport: { width: 1366, height: 860 }, isMobile: false, hasTouch: false })
   test('header navigation, account menu and preferences change suggestions', async ({ page }) => {
     await loginAsMaria(page)
     const main = page.getByRole('navigation', { name: 'Main' }).first()
-    for (const l of ['Home', 'Explore Tours', 'Destinations', 'Van Rental', 'My Trips']) await expect(main.getByRole('link', { name: l })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Matches your interests' })).toBeVisible()
+    for (const l of ['Home', 'Explore', 'Van Rental', 'Reviews', 'My Trips']) await expect(main.getByRole('link', { name: l })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /^Because you like/ })).toBeVisible()
     await expect(page.getByText('Matches Food and Nature · within your ₱3,000 budget').first()).toBeVisible()
     await page.getByRole('button', { name: /Account menu/ }).click()
     await page.getByRole('link', { name: 'Travel preferences' }).click()

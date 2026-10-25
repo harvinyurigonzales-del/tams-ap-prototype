@@ -69,7 +69,7 @@ export function CustomRequestForm() {
   return (
     <div>
       <BackLink label="Back" />
-      <h1 className="font-display text-2xl font-bold text-brand-900">Plan a custom trip</h1>
+      <h1 className="type-head text-[32px] text-charcoal md:text-[40px]">Plan a custom trip</h1>
       <p className="mt-1 max-w-2xl text-sm text-ink-2">
         Tell us about your trip. Staff prepare a proposal with an itinerary and price. A request is not a booking: nothing is reserved and you pay only if you accept the proposal.
       </p>
@@ -204,7 +204,7 @@ export function CustomRequestDetails() {
         <div className="space-y-5">
           <Card className="p-5">
             <p className="text-sm text-ink-2">{r.id} · custom trip request</p>
-            <h1 className="font-display text-2xl font-bold text-brand-900">{dest.name} custom trip</h1>
+            <h1 className="type-head text-[32px] text-charcoal md:text-[40px]">{dest.name} custom trip</h1>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <RequestStatusBadge status={r.status} kind="custom" />
               {r.status === 'Proposal ready' && expired && <StatusBadge status="Expired" />}
@@ -230,7 +230,7 @@ export function CustomRequestDetails() {
           {p && (r.status === 'Proposal ready' || r.status === 'Accepted') && (
             <Card className="p-5">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h2 className="font-display text-lg font-semibold text-brand-900">Proposal: {p.title}</h2>
+                <h2 className="type-head text-[22px] text-charcoal">Proposal: {p.title}</h2>
                 <p className={`text-xs ${expired && r.status === 'Proposal ready' ? 'font-semibold text-bad' : 'text-ink-2'}`}>
                   Sent {fmtStamp(p.sentAt)} · valid until {fmtDate(p.validUntil, { year: false })}
                 </p>
@@ -271,7 +271,7 @@ export function CustomRequestDetails() {
           {r.status === 'Under review' && p && <p className="rounded-xl bg-info-bg px-4 py-3 text-sm text-info">Staff are updating your proposal after your change request.</p>}
 
           <Card className="p-5">
-            <h2 className="font-display text-lg font-semibold text-brand-900">Status</h2>
+            <h2 className="type-head text-[22px] text-charcoal">Status</h2>
             <Timeline steps={steps} />
           </Card>
         </div>

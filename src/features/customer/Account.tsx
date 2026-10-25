@@ -33,7 +33,7 @@ export function Account() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
-      <h1 className="font-display text-2xl font-bold text-brand-900">Account</h1>
+      <h1 className="type-head text-[32px] text-charcoal md:text-[40px]">Account</h1>
       <Card>
         <ul className="divide-y divide-line">
           {[
@@ -108,7 +108,7 @@ export function Notifications() {
   return (
     <div className="mx-auto max-w-2xl">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="font-display text-2xl font-bold text-brand-900">Notifications</h1>
+        <h1 className="type-head text-[32px] text-charcoal md:text-[40px]">Notifications</h1>
         {unread && (
           <Button variant="ghost" size="sm" onClick={markAllRead}>
             Mark all as read

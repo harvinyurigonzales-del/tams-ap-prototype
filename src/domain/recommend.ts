@@ -119,7 +119,7 @@ export function recommendationRows(d: Dataset, ctx: RecContext, today = DEMO_TOD
       if (items.some((i) => i.kind === kind && i.id === id)) continue
       if (kind === 'tour' ? tourOk(id) : destOk(id)) items.push({ kind, id, reason: 'You viewed this earlier' })
     }
-    take({ id: 'continue', title: 'Continue planning', items })
+    take({ id: 'continue', title: 'Pick up where you left off', items })
   }
 
   // 2. Based on a completed trip. Only real completed bookings of the active customer count.
@@ -139,7 +139,7 @@ export function recommendationRows(d: Dataset, ctx: RecContext, today = DEMO_TOD
       .map((x) => ({ id: x.s.id, s: x.shared.length, shared: x.shared }))
       .sort(stable)
       .map<RecItem>((x) => ({ kind: 'tour', id: x.id, reason: `Like your ${from.name} trip: ${listAnd(x.shared.slice(0, 2))}` }))
-    take({ id: 'history', title: `Inspired by your ${from.name} trip`, items })
+    take({ id: 'history', title: `Because you went to ${from.name}`, items })
   }
 
   // 3. Preferences. Only shown when the customer has set at least one preference.
@@ -167,13 +167,13 @@ export function recommendationRows(d: Dataset, ctx: RecContext, today = DEMO_TOD
     ]
     // Tours first when the customer prefers joiner tours, destinations first for private or custom trips.
     if (prefs.style === 'Private or custom') matchItems.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'destination' ? -1 : 1))
-    take({ id: 'interests', title: 'Matches your interests', items: matchItems })
+    take({ id: 'interests', title: prefs.interests.length ? `Because you like ${listAnd(prefs.interests.slice(0, 3).map((i) => i.toLowerCase()))}` : 'Matches your preferences', items: matchItems })
     if (prefs.budgetMax > 0) {
       const items = tours
         .filter((x) => x.sc.withinBudget)
         .sort((a, b) => fromPrice(d, a.svc, today) - fromPrice(d, b.svc, today) || a.id.localeCompare(b.id))
         .map<RecItem>((x) => ({ kind: 'tour', id: x.id, reason: `From ${peso(fromPrice(d, x.svc, today))} per person` }))
-      take({ id: 'budget', title: 'Around your budget', items })
+      take({ id: 'budget', title: `Within your ${peso(prefs.budgetMax)} budget`, items })
     }
   }
 
@@ -183,13 +183,13 @@ export function recommendationRows(d: Dataset, ctx: RecContext, today = DEMO_TOD
     .filter((x) => x.next)
     .sort((a, b) => a.next!.dep.startDate.localeCompare(b.next!.dep.startDate) || a.s.id.localeCompare(b.s.id))
     .map<RecItem>((x) => ({ kind: 'tour', id: x.s.id, reason: `Next departure ${shortDay(x.next!.dep.startDate)} · ${x.next!.avail.left} seats left` }))
-  take({ id: 'departures', title: 'Upcoming departures with open seats', items: departures })
+  take({ id: 'departures', title: 'Leaving soon, with seats left', items: departures })
   const destinations = d.destinations.map<RecItem>((x) => ({
     kind: 'destination',
     id: x.id,
     reason: catalogTours(d).some((s) => s.destinationId === x.id && tourOk(s.id)) ? 'Tours with open dates' : 'Plan it as a custom trip',
   }))
-  take({ id: 'destinations', title: 'Destinations to explore', items: destinations })
+  take({ id: 'destinations', title: 'Places worth planning for', items: destinations })
   return rows
 }
 

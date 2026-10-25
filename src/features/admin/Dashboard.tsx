@@ -7,6 +7,7 @@ import { LocalTag, StatusBadge } from '../../ui/Badge'
 import { Card, SectionTitle } from '../../ui/Card'
 import { BarList, ColumnChart } from '../../ui/Charts'
 import { PageHeader } from './AdminRoutes'
+import { SalesOutlook } from './Outlook'
 import { ActivityList, customerOf, Kpi, serviceOf, Table, td } from './common'
 
 export function Dashboard() {
@@ -18,15 +19,19 @@ export function Dashboard() {
 
   return (
     <div>
-      <PageHeader title="Welcome back, Admin!" subtitle="Here is what needs attention today." />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <PageHeader title="Magandang umaga, Admin" subtitle="Here is what needs attention today." />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4 [&>*:first-child]:col-span-2 sm:[&>*:first-child]:col-span-1">
         <Kpi emphasis label="Verified collections · October" value={peso(k.collections)} note="Payments verified this month" to="/admin/reports?tab=revenue" />
         <Kpi label="Payments to verify" value={k.toVerify} note={k.toVerify ? `${peso(k.toVerifyAmount)} submitted` : 'All caught up'} to="/admin/bookings?payment=Submitted" />
         <Kpi label="Outstanding balance" value={peso(k.outstanding)} note="Pending and confirmed bookings" to="/admin/bookings?tab=Confirmed" />
         <Kpi label="Needs van assignment" value={k.needsAssignment} note="Confirmed trips without a van" to="/admin/calendar" />
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_380px]">
+      <div className="mt-6">
+        <SalesOutlook />
+      </div>
+
+      <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_380px] [&>*]:min-w-0">
         <Card className="p-5">
           <SectionTitle>Bookings created per week</SectionTitle>
           <ColumnChart
@@ -43,7 +48,7 @@ export function Dashboard() {
         </Card>
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_380px]">
+      <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_380px] [&>*]:min-w-0">
         <Card>
           <div className="p-5 pb-3">
             <SectionTitle

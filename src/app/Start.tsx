@@ -4,7 +4,6 @@ import { fmtDate } from '../lib/format'
 import { DEMO_TODAY } from '../lib/demoClock'
 import { InstallButton } from '../pwa/InstallHelp'
 import { BrandMark } from '../ui/BrandMark'
-import { DemoBanner } from '../ui/DemoBanner'
 import { ResetDemoButton, useResetOnArrival } from './ResetDemo'
 
 /** Presenter hub: two demos that do not share data, plus Reset and Install. */
@@ -12,7 +11,6 @@ export function Start() {
   useResetOnArrival()
   return (
     <div className="min-h-dvh">
-      <DemoBanner />
       <main className="mx-auto max-w-4xl px-4 py-10 sm:py-16">
         <BrandMark />
         <h1 className="mt-8 font-display text-3xl leading-tight font-bold text-brand-900 sm:text-4xl">Booking Management System</h1>

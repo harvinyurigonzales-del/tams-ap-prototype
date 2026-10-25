@@ -31,6 +31,7 @@ interface AdminState {
   markRead: (id: string) => void
   markAllRead: () => void
   replyInquiry: (inquiryId: string, text: string) => Result
+  replyReview: (reviewId: string, text: string) => Result
   resolveInquiry: (inquiryId: string) => Result
   startReview: (kind: 'custom' | 'rental', id: string) => Result
   sendProposal: (kind: 'custom' | 'rental', id: string) => Result
@@ -191,6 +192,17 @@ export const useAdmin = create<AdminState>((set, get) => ({
     if (!q) return { ok: false, error: 'Inquiry not found.' }
     q.messages.push({ from: 'staff', at: demoNowStamp('admin'), text: text.trim(), simulated: true })
     q.status = 'Staff replied'
+    set({ data })
+    return { ok: true }
+  },
+
+  replyReview: (reviewId, text) => {
+    if (!text.trim()) return { ok: false, error: 'Write a reply first.' }
+    if (text.trim().length > 500) return { ok: false, error: 'Keep the reply under 500 characters.' }
+    const data = structuredClone(get().data)
+    const r = data.reviews.find((x) => x.id === reviewId)
+    if (!r) return { ok: false, error: 'Review not found.' }
+    r.staffReply = { text: text.trim(), at: demoNowStamp('admin') }
     set({ data })
     return { ok: true }
   },

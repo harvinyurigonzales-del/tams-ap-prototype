@@ -13,8 +13,9 @@ test('customer walkthrough C1–C10', async ({ page }) => {
   await expect(page.getByText('Email or password is incorrect.')).toBeVisible()
   await page.getByRole('button', { name: 'Use demo account' }).click()
   await expect(page.getByText('Hello, Maria')).toBeVisible()
-  await expect(page.getByText('Oct 17 · 8 slots remaining')).toBeVisible()
-  await expect(page.getByText('Oct 24 · 12 slots remaining')).toBeVisible()
+  // The featured promo tour shows its date and seats; other cards show their next open departure.
+  await expect(page.getByText('8 seats left').first()).toBeVisible()
+  await expect(page.getByText('12 seats left').first()).toBeVisible()
 
   const nav = page.getByRole('navigation', { name: 'Main' }).last()
   await nav.getByRole('link', { name: 'My Trips' }).click()
@@ -23,8 +24,7 @@ test('customer walkthrough C1–C10', async ({ page }) => {
 
   // In-app navigation only: a full page load would reset the in-memory demo.
   await nav.getByRole('link', { name: 'Explore' }).click()
-  await page.getByRole('link', { name: /Explore tours/ }).click()
-  await page.getByRole('link', { name: 'Baguio Weekend Escape' }).click()
+  await page.getByRole('link', { name: 'Baguio Weekend Escape', exact: true }).click()
   await page.getByRole('link', { name: 'View dates' }).click()
   await expect(page.getByRole('heading', { name: 'October 2026' })).toBeVisible()
   await page.getByRole('gridcell', { name: /Oct 10, 2026, Full/ }).click({ force: true })
@@ -47,8 +47,11 @@ test('customer walkthrough C1–C10', async ({ page }) => {
   await expect(page.getByText('BK-2026-0148')).toBeVisible()
 
   await page.getByRole('link', { name: 'Pay now' }).click()
-  await page.getByLabel('Reference number').fill('1009 8822 5531')
-  await page.getByRole('button', { name: 'Use sample receipt' }).click()
+  // The demo helper fills a valid reference and the sample receipt, but never submits by itself.
+  await page.getByRole('button', { name: 'Fill test payment' }).click()
+  await expect(page.getByLabel('Reference number')).toHaveValue('DEMO 1009 8822')
+  await expect(page.getByText('sample-receipt.svg')).toBeVisible()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await page.getByRole('button', { name: 'Submit payment' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Submit payment' }).click()
   await expect(page.getByRole('heading', { name: 'Payment submitted' })).toBeVisible()
@@ -57,8 +60,7 @@ test('customer walkthrough C1–C10', async ({ page }) => {
   await expect(page.getByText('Awaiting verification').first()).toBeVisible()
 
   await nav.getByRole('link', { name: 'Explore' }).click()
-  await page.getByRole('link', { name: /Explore tours/ }).click()
-  await page.getByRole('link', { name: 'Baguio Weekend Escape' }).click()
+  await page.getByRole('link', { name: 'Baguio Weekend Escape', exact: true }).click()
   await page.getByRole('link', { name: 'View dates' }).click()
   await expect(page.getByRole('gridcell', { name: /Oct 17, 2026, 6 left/ })).toBeVisible()
   await page.screenshot({ path: 'test-results/customer-dates.png', fullPage: true })

@@ -15,6 +15,7 @@ import { EmptyState } from '../../ui/EmptyState'
 import { mobileError, nameError } from '../../ui/validate'
 import { BackLink } from './Explore'
 import { Steps } from './Steps'
+import { bookingSteps, Stepper } from './Timeline'
 
 export function PriceSummary({ unitPrice, promoOff, pax, total, unit = 'person', days }: { unitPrice: number; promoOff: number; pax: number; total: number; unit?: 'person' | 'day'; days?: number }) {
   return (
@@ -98,7 +99,7 @@ export function BookingForm() {
     <div>
       {step === 2 ? <BackLink to={`/app/tours/${service.id}/dates?d=${dep.id}`} label="Choose date" /> : <BackLink label="Edit details" />}
       <Steps current={step} />
-      <h1 className="font-display text-2xl font-bold text-brand-900">{step === 2 ? 'Booking details' : 'Review booking'}</h1>
+      <h1 className="type-head text-[32px] text-charcoal md:text-[40px]">{step === 2 ? 'Booking details' : 'Review booking'}</h1>
       <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_360px]">
         {step === 2 ? (
           <Card className="space-y-5 p-5">
@@ -215,13 +216,16 @@ export function BookingReceived() {
     <div className="mx-auto max-w-lg">
       <Card className="p-6 text-center">
         <CheckCircle2 className="mx-auto size-14 text-ok" aria-hidden />
-        <h1 className="mt-3 font-display text-2xl font-bold text-brand-900">Booking received</h1>
+        <h1 className="mt-3 type-head text-[32px] text-charcoal md:text-[40px]">Booking received</h1>
         <p className="mt-1 text-sm text-ink-2">
           Reference <span className="font-semibold text-ink">{b.id}</span>
         </p>
         <div className="mt-4 flex justify-center gap-2">
           <StatusBadge status={b.status} />
           <StatusBadge status={m.summary} />
+        </div>
+        <div className="mt-6 text-left">
+          <Stepper steps={bookingSteps(data, b)} />
         </div>
         <div className="mt-5 text-left">
           <Row label="Trip">{bookingTitle(b, s)}</Row>

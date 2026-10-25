@@ -24,7 +24,7 @@ export function Messages() {
   return (
     <div className="mx-auto max-w-2xl">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="font-display text-2xl font-bold text-brand-900">Messages</h1>
+        <h1 className="type-head text-[32px] text-charcoal md:text-[40px]">Messages</h1>
         <Button size="sm" variant="secondary" icon={<MessageCircleQuestion className="size-4" aria-hidden />} onClick={() => openWith()}>
           Ask TAMS
         </Button>

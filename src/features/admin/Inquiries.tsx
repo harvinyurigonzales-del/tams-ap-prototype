@@ -22,7 +22,7 @@ export function AdminInquiries() {
   return (
     <div>
       <PageHeader title="Inquiries" subtitle="Sample customer questions. Replies are recorded here only; nothing is sent." />
-      <div className="grid gap-6 lg:grid-cols-[300px_1fr_300px]">
+      <div className="grid gap-6 lg:grid-cols-[300px_1fr_300px] [&>*]:min-w-0">
         <Card className="h-fit">
           <ul className="divide-y divide-line">
             {data.inquiries.map((x) => {

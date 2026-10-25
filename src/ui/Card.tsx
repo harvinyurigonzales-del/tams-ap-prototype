@@ -11,7 +11,7 @@ export function Card({ className = '', children, ...rest }: HTMLAttributes<HTMLD
 export function SectionTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
-      <h2 className="font-display text-lg font-semibold text-brand-900">{children}</h2>
+      <h2 className="font-display text-lg font-bold text-charcoal">{children}</h2>
       {action}
     </div>
   )

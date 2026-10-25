@@ -1,4 +1,4 @@
-import { CheckCircle2, FileImage, Upload, X } from 'lucide-react'
+import { CheckCircle2, ClipboardCheck, FileImage, Upload, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { money, payableOptions } from '../../domain/rules'
@@ -75,11 +75,18 @@ export function Pay() {
     if (!errs.reference && !errs.proof) setConfirm(true)
   }
 
+  // Demo helper: fills the form with values that pass validation, but never submits on its own.
+  const fillTest = () => {
+    setReference('DEMO 1009 8822')
+    setProof({ kind: 'sample', name: 'sample-receipt.svg' })
+    setErrors({ reference: '', proof: '' })
+  }
+
   return (
     <div>
       <BackLink to={`/app/trips/${b.id}`} label="Trip details" />
       <Steps current={4} />
-      <h1 className="font-display text-2xl font-bold text-brand-900">Payment</h1>
+      <h1 className="type-head text-[32px] text-charcoal md:text-[40px]">Payment</h1>
       {m.lastRejected && (
         <p className="mt-3 rounded-xl bg-bad-bg px-4 py-3 text-sm text-bad">
           Your last payment was not accepted: {m.lastRejected.rejectReason} Please send new proof.
@@ -87,6 +94,15 @@ export function Pay() {
       )}
       <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_360px]">
         <Card className="space-y-6 p-5">
+          <div className="flex flex-col gap-3 rounded-xl border border-dashed border-line-strong bg-surface-muted px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-ink-2">
+              <span className="font-semibold text-ink">Trying the demo?</span> Fill in a sample reference number and the sample receipt. You still review it before anything is submitted.
+            </p>
+            <Button variant="secondary" icon={<ClipboardCheck className="size-4" aria-hidden />} onClick={fillTest} className="shrink-0">
+              Fill test payment
+            </Button>
+          </div>
+
           <fieldset>
             <legend className="mb-2 text-sm font-medium text-ink">Payment method</legend>
             <div className="grid grid-cols-3 gap-2">
@@ -215,7 +231,7 @@ function PaymentSubmitted({ payment, bookingId }: { payment: Payment; bookingId:
     <div className="mx-auto max-w-lg">
       <Card className="p-6 text-center">
         <CheckCircle2 className="mx-auto size-14 text-ok" aria-hidden />
-        <h1 className="mt-3 font-display text-2xl font-bold text-brand-900">Payment submitted</h1>
+        <h1 className="mt-3 type-head text-[32px] text-charcoal md:text-[40px]">Payment submitted</h1>
         <p className="mt-1 text-sm text-ink-2">Awaiting verification by the agency.</p>
         <div className="mt-4 flex justify-center">
           <StatusBadge status={payment.status} customer />

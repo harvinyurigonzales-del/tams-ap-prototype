@@ -1,7 +1,6 @@
 import { BusFront, CalendarDays, CheckSquare, ChevronRight, ClipboardList, PencilRuler, Phone, Square, Ticket } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { requestStatusLabel } from '../../domain/requests'
 import { canCancel, money, payableOptions } from '../../domain/rules'
 import { daysBetween, DEMO_TODAY } from '../../lib/demoClock'
 import { fmtDate, fmtRange, fmtStamp, fmtTime, peso } from '../../lib/format'
@@ -17,7 +16,7 @@ import { Picture } from '../../ui/Picture'
 import { bookingTitle } from './Book'
 import { BackLink } from './Explore'
 import { AskAboutButton, RequestStatusBadge } from './Requests'
-import { Timeline, type TimelineStep } from './Timeline'
+import { bookingSteps, Stepper } from './Timeline'
 
 type Tab = 'bookings' | 'custom' | 'rental'
 const TABS: { key: Tab; label: string }[] = [
@@ -47,7 +46,7 @@ export function Trips() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-bold text-brand-900">My Trips</h1>
+      <h1 className="type-head text-[32px] text-charcoal md:text-[40px]">My Trips</h1>
       <div role="tablist" aria-label="Trip records" className="mt-4 flex max-w-full gap-1 overflow-x-auto rounded-xl bg-surface-muted p-1 sm:inline-flex">
         {TABS.map((t) => (
           <button
@@ -193,28 +192,6 @@ function RequestList({ rows, empty }: { rows: ReqRow[]; empty: ReactNode }) {
   )
 }
 
-/** Booking timeline from real events: the request (if any), payments and confirmation. */
-function bookingSteps(d: Dataset, b: Booking): TimelineStep[] {
-  const payments = d.payments.filter((p) => p.bookingId === b.id)
-  const m = money(b, d.payments)
-  const cr = d.customRequests.find((r) => r.id === b.requestId)
-  const vr = d.rentalRequests.find((r) => r.id === b.requestId)
-  const req = cr ?? vr
-  const steps: TimelineStep[] = []
-  if (req) {
-    const kind = cr ? 'custom' : 'rental'
-    steps.push({ label: 'Request sent', at: req.createdAt, done: true, note: req.id })
-    const sent = req.events.filter((e) => e.status === 'Proposal ready').at(-1)
-    if (sent) steps.push({ label: `${requestStatusLabel('Proposal ready', kind) === 'Quote ready' ? 'Quote' : 'Proposal'} sent`, at: sent.at, done: true })
-  }
-  steps.push({ label: req ? 'Accepted, booking created' : 'Booking submitted', at: b.createdAt, done: true })
-  steps.push({ label: 'Payment submitted', at: payments[0]?.submittedAt, done: payments.length > 0 })
-  steps.push({ label: 'Payment verified', at: payments.find((p) => p.status === 'Verified')?.reviewedAt, done: m.paid > 0 })
-  steps.push({ label: 'Booking confirmed', at: b.confirmedAt, done: b.status === 'Confirmed' || b.status === 'Completed' })
-  steps.push({ label: 'Trip completed', done: b.status === 'Completed' })
-  return steps
-}
-
 export function TripDetails() {
   const { bookingId } = useParams()
   const { data, customerId, requestCancellation } = useCustomer()
@@ -235,14 +212,20 @@ export function TripDetails() {
     <div>
       <BackLink to="/app/trips" label="My Trips" />
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <Card className="p-5">
             <p className="text-sm text-ink-2">{b.id}</p>
-            <h1 className="font-display text-2xl font-bold text-brand-900">{bookingTitle(b, s)}</h1>
+            <h1 className="type-head text-[32px] text-charcoal md:text-[40px]">{bookingTitle(b, s)}</h1>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <StatusBadge status={b.status} />
               <StatusBadge status={m.summary} />
             </div>
+            {b.status !== 'Cancelled' && (
+              <div className="mt-5 border-t border-line pt-5">
+                <h2 className="sr-only">Status</h2>
+                <Stepper steps={bookingSteps(data, b)} />
+              </div>
+            )}
             <div className="mt-4 space-y-1 text-sm text-ink-2">
               <p className="flex items-center gap-2">
                 <CalendarDays className="size-4" aria-hidden /> {fmtRange(b.startDate, b.endDate)}
@@ -271,15 +254,8 @@ export function TripDetails() {
 
           {showPreTravel && <PreTravel booking={b} />}
 
-          {b.status !== 'Cancelled' && (
-            <Card className="p-5">
-              <h2 className="font-display text-lg font-semibold text-brand-900">Status</h2>
-              <Timeline steps={bookingSteps(data, b)} />
-            </Card>
-          )}
-
           <Card className="p-5">
-            <h2 className="font-display text-lg font-semibold text-brand-900">Payments</h2>
+            <h2 className="type-head text-[22px] text-charcoal">Payments</h2>
             {payments.length === 0 ? (
               <p className="mt-2 text-sm text-ink-2">No payments yet.</p>
             ) : (
@@ -384,7 +360,7 @@ function PreTravel({ booking: b }: { booking: Booking }) {
   return (
     <Card className="p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="flex items-center gap-2 font-display text-lg font-semibold text-brand-900">
+        <h2 className="flex items-center gap-2 type-head text-[22px] text-charcoal">
           <ClipboardList className="size-5 text-brand-600" aria-hidden /> Before you travel
         </h2>
         <p className="text-sm font-medium text-ink-2">{days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `In ${days} days`}</p>

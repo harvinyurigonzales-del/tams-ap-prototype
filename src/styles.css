@@ -1,41 +1,86 @@
 @import 'tailwindcss';
 
-/* Design tokens (spec section 8). Swap this block to re-theme the whole prototype. */
+/*
+ * Design tokens: TAMS AP brand Concept A, "Heritage, Refined". Road Navy and Heritage Red come straight from
+ * the logo; Cream and Ink carry the page. Swap this block to re-theme the whole prototype.
+ */
 @theme {
-  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
-  --font-display: 'Poppins', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Archivo Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Arvo', 'Archivo Variable', ui-serif, Georgia, serif;
+  /* Headlines: Arvo, the slab used for the TAMS AP wordmark. */
+  --font-hero: 'Arvo', 'Archivo Variable', ui-serif, Georgia, serif;
 
-  --color-brand-50: #f4f1fd;
-  --color-brand-100: #e9e3fb;
-  --color-brand-200: #d3c7f7;
-  --color-brand-300: #b4a0f0;
-  --color-brand-400: #8f72e6;
-  --color-brand-500: #6f4fd8;
-  --color-brand-600: #5b3cc4;
-  --color-brand-700: #4a2fa3;
-  --color-brand-800: #3a2580;
-  --color-brand-900: #261854;
+  /* Road Navy scale (#1D3A7A sits at 600, the default for buttons, links and selected states). */
+  --color-brand-50: #eef2fa;
+  --color-brand-100: #dde5f4;
+  --color-brand-200: #bccbea;
+  --color-brand-300: #93aad9;
+  --color-brand-400: #6f8edb;
+  --color-brand-500: #3d5ea8;
+  --color-brand-600: #1d3a7a;
+  --color-brand-700: #183268;
+  --color-brand-800: #132854;
+  --color-brand-900: #0e1d3d;
 
-  --color-bg: #f7f6fb;
+  /* Admin and shared surfaces: a quiet warm white, so staff screens stay calm and legible. */
+  --color-bg: #f6f4ef;
   --color-surface: #ffffff;
-  --color-surface-muted: #f1eff8;
-  --color-line: #e4e1ee;
-  --color-line-strong: #cfcae0;
-  --color-ink: #1e1b2e;
-  --color-ink-2: #5b5670;
-  --color-ink-3: #76718a;
+  --color-surface-muted: #f3f0e9;
+  --color-line: #e6e1d6;
+  --color-line-strong: #d0c9ba;
+  --color-ink: #1a1f2b;
+  --color-ink-2: #4f5562;
+  --color-ink-3: #6a707c;
 
-  --color-ok: #14794a;
-  --color-ok-bg: #e6f6ee;
-  --color-warn: #9a5b00;
-  --color-warn-bg: #fff1d6;
-  --color-bad: #b42318;
-  --color-bad-bg: #fdecea;
-  --color-info: #1d4ed8;
-  --color-info-bg: #e8effd;
+  --color-ok: #17734a;
+  --color-ok-bg: #e5f4ec;
+  --color-warn: #8f5400;
+  --color-warn-bg: #fdf0d8;
+  --color-bad: #b3242a;
+  --color-bad-bg: #fbe9e9;
+  --color-info: #1d3a7a;
+  --color-info-bg: #eef2fa;
 
-  --shadow-card: 0 1px 2px rgba(30, 27, 46, 0.06);
-  --shadow-pop: 0 8px 24px rgba(30, 27, 46, 0.1);
+  --shadow-card: 0 1px 2px rgba(26, 31, 43, 0.05);
+  --shadow-pop: 0 12px 30px -12px rgba(26, 31, 43, 0.25);
+
+  /* Concept A named colours. */
+  --color-sili: #c8282f; /* Heritage Red: name, pin, key actions */
+  --color-sili-600: #a91f26;
+  --color-sili-50: #fbeceb;
+  --color-navy: #1d3a7a; /* Road Navy */
+  --color-periwinkle: #6f8edb; /* accents only, never small text */
+  --color-ivory: #f5efe3; /* Cream */
+  --color-sand: #ede4d2;
+  --color-sand-2: #e2d6bf;
+  --color-charcoal: #1a1f2b; /* Ink */
+  --color-palay: #3f6a33;
+  --color-palay-50: #ebf2e6;
+  --color-star: #e0a21b;
+}
+
+/*
+ * The customer app uses the same brand on warmer Cream surfaces. Shared components (buttons, fields,
+ * badges, cards) read these tokens, so they re-skin without forks.
+ */
+.theme-tara {
+  --color-bg: #f5efe3;
+  --color-surface: #fffcf6;
+  --color-surface-muted: #efe7d7;
+  --color-line: #e4d9c4;
+  --color-line-strong: #cdbfa4;
+  --color-ink: #1a1f2b;
+  --color-ink-2: #4c5160;
+  --color-ink-3: #666b77;
+
+  --shadow-card: 0 1px 2px rgba(56, 42, 20, 0.06);
+  --shadow-pop: 0 16px 36px -14px rgba(40, 32, 18, 0.3);
+
+  background: var(--color-bg);
+  color: var(--color-ink);
+}
+.theme-tara :focus-visible {
+  outline-color: var(--color-brand-600);
 }
 
 @layer base {
@@ -59,6 +104,57 @@
 
 @utility tnum {
   font-variant-numeric: tabular-nums;
+}
+
+/* Headline type: Arvo Bold, the wordmark's slab. Tight leading for display sizes. */
+@utility type-hero {
+  font-family: var(--font-hero);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.02;
+}
+@utility type-head {
+  font-family: var(--font-hero);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+/* Small caps-style label, like the logo's spaced "TRAVEL AND TOURS". */
+@utility type-eyebrow {
+  font-family: var(--font-sans);
+  font-weight: 650;
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* The one recurring motif: a dashed road line, like the route on a trip plan. */
+@utility route-line {
+  background-image: linear-gradient(to right, currentColor 55%, transparent 0);
+  background-size: 12px 2px;
+  background-repeat: repeat-x;
+  background-position: left center;
+}
+@utility route-line-y {
+  background-image: linear-gradient(to bottom, currentColor 55%, transparent 0);
+  background-size: 2px 10px;
+  background-repeat: repeat-y;
+  background-position: center top;
+}
+
+/* One orchestrated entrance for the home hero; nothing else animates on its own. */
+@keyframes tara-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@utility tara-rise {
+  animation: tara-rise 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {

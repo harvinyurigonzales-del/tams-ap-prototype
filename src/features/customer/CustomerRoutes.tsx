@@ -2,22 +2,22 @@ import type { ReactNode } from 'react'
 import { Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { NotFound } from '../../app/NotFound'
 import { useCustomer } from '../../state/customerStore'
-import { DemoBanner } from '../../ui/DemoBanner'
 import { Account, Notifications } from './Account'
 import { Login, Signup } from './Auth'
 import { BookingForm, BookingReceived } from './Book'
 import { ChooseDate } from './ChooseDate'
 import { CustomRequestDetails, CustomRequestForm } from './Custom'
-import { DestinationDetails, DestinationList } from './Destinations'
-import { ExploreHub } from './Explore'
+import { DestinationDetails } from './Destinations'
+import { ExplorePage } from './Explore'
 import { Home } from './Home'
 import { Shell } from './Layout'
 import { Messages, MessageThread } from './Messages'
 import { Pay } from './Pay'
 import { Preferences } from './Preferences'
 import { RentalLanding, RentalRequestDetails, RentalRequestForm } from './Rental'
+import { ReviewsPage } from './Reviews'
 import { Saved } from './Saved'
-import { TourCatalog, TourDetails } from './Tours'
+import { TourDetails } from './Tours'
 import { TripDetails, Trips } from './Trips'
 
 export function CustomerRoutes() {
@@ -28,15 +28,16 @@ export function CustomerRoutes() {
       <Route element={<Shell />}>
         {/* Guests can browse everything here and fill in request forms; sending one asks them to log in. */}
         <Route index element={<Home />} />
-        <Route path="explore" element={<ExploreHub />} />
-        <Route path="tours" element={<TourCatalog />} />
+        <Route path="explore" element={<ExplorePage />} />
+        <Route path="tours" element={<ExplorePage defaultView="tours" />} />
         <Route path="tours/:serviceId" element={<TourDetails />} />
         <Route path="tours/:serviceId/dates" element={<ChooseDate />} />
-        <Route path="destinations" element={<DestinationList />} />
+        <Route path="destinations" element={<ExplorePage defaultView="destinations" />} />
         <Route path="destinations/:destinationId" element={<DestinationDetails />} />
         <Route path="rental" element={<RentalLanding />} />
         <Route path="rental/request" element={<RentalRequestForm />} />
         <Route path="custom/new" element={<CustomRequestForm />} />
+        <Route path="reviews" element={<ReviewsPage />} />
 
         {/* Old links from the first version of the prototype. */}
         <Route path="services" element={<Navigate to="/app/tours" replace />} />
@@ -82,8 +83,7 @@ function RequireCustomer() {
 
 function Bare({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-dvh">
-      <DemoBanner side="Customer demo" />
+    <div className="theme-tara min-h-dvh">
       {children}
     </div>
   )

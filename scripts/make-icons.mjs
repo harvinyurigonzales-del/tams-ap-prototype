@@ -1,12 +1,16 @@
-// Renders the "TA" placeholder monogram to PNG icons with the bundled Chromium. Run: npm run icons
-// Replace these files (and src/ui/BrandMark.tsx) when the official logo is available.
+// Renders the TAMS AP app icon (public/brand/tams-icon.svg, Concept A) to PNG icons with the bundled
+// Chromium. Run: npm run icons
 import { chromium } from '@playwright/test'
-import { writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 
-const svg = (size, pad) => `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-  <rect width="${size}" height="${size}" ${pad ? '' : `rx="${size * 0.22}"`} fill="#5B3CC4"/>
-  <text x="50%" y="50%" dy="0.35em" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="${size * (pad ? 0.3 : 0.42)}" fill="#fff">TA</text>
-</svg>`
+const icon = await readFile('public/brand/tams-icon.svg', 'utf8')
+const symbol = await readFile('public/brand/tams-symbol.svg', 'utf8')
+
+// Rounded icon for "any"; full-bleed Cream square with the symbol inside the safe zone for maskable.
+const html = (size, pad) =>
+  pad
+    ? `<div style="width:${size}px;height:${size}px;background:#F5EFE3;display:grid;place-items:center"><div style="width:${size * 0.66}px">${symbol.replace('<svg ', '<svg style="width:100%;height:auto;display:block" ')}</div></div>`
+    : `<div style="width:${size}px;height:${size}px">${icon.replace('<svg ', '<svg style="width:100%;height:100%;display:block" ')}</div>`
 
 const targets = [
   ['public/icons/icon-192.png', 192, false],
@@ -19,7 +23,7 @@ const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PAT
 const page = await browser.newPage()
 for (const [file, size, pad] of targets) {
   await page.setViewportSize({ width: size, height: size })
-  await page.setContent(`<html><body style="margin:0;background:transparent">${svg(size, pad)}</body></html>`)
+  await page.setContent(`<html><body style="margin:0;background:transparent">${html(size, pad)}</body></html>`)
   await writeFile(file, await page.screenshot({ omitBackground: true, clip: { x: 0, y: 0, width: size, height: size } }))
   console.log('wrote', file)
 }
