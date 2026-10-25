@@ -2,7 +2,7 @@ import { expect, test, signInSample } from './fixtures'
 
 // Second revision round: hero slideshow, looping carousels, floating assistant, sign-in page and demo helpers.
 
-test('hero photos crossfade about every 2 seconds behind steady text, and hold while the search is in use', async ({ page }) => {
+test('hero photos crossfade about every 1.8 seconds behind steady text, and hold while the search is in use', async ({ page }) => {
   await page.goto('/app')
   const frame = page.locator('[data-slide]')
   const title = await page.locator('#hero-title').textContent()
@@ -20,14 +20,17 @@ test('hero photos crossfade about every 2 seconds behind steady text, and hold w
   const held = await frame.getAttribute('data-slide')
   await page.waitForTimeout(3000)
   await expect(frame).toHaveAttribute('data-slide', held!)
+  // Clicking blank page moves focus to the body, which fires no focusin: the slideshow must resume anyway.
+  await page.locator('#hero-title').click()
+  await expect(frame).not.toHaveAttribute('data-slide', held!, { timeout: 6000 })
 })
 
-test('reduced motion shows one still hero photo', async ({ page }) => {
+test('reduced motion still changes hero photos (a fade, nothing moves)', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/app')
-  await page.waitForTimeout(3000)
-  await expect(page.locator('[data-slide]')).toHaveAttribute('data-slide', '0')
-  await expect(page.locator('[data-slide] img[srcset]')).toHaveCount(1)
+  const frame = page.locator('[data-slide]')
+  await expect(frame).toHaveAttribute('data-slide', '0')
+  await expect(frame).toHaveAttribute('data-slide', '1', { timeout: 6000 })
 })
 
 test('carousels loop with edge arrows and count each card once for keyboard users', async ({ page }) => {

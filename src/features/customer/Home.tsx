@@ -22,8 +22,8 @@ import { TRIP_DESK } from './Trips'
  */
 const HERO_SLIDES = ['DST-BANAUE', 'DST-VIGAN', 'DST-PAGUDPUD', 'DST-HUNDRED', 'DST-BAGUIO', 'DST-PINATUBO', 'DST-ZAMBALES', 'DST-INTRAMUROS', 'DST-TAGAYTAY', 'DST-BATANGAS']
 /** Time each photo shows, and the crossfade between them. */
-const SLIDE_MS = 2000
-const FADE_MS = 700
+const SLIDE_MS = 1800
+const FADE_MS = 600
 /** The destination given the large storytelling feature: a real photo and a scheduled joiner tour. */
 const SPOTLIGHT_DESTINATION = 'DST-BAGUIO'
 
@@ -95,40 +95,55 @@ export function Home() {
 function Hero({ greeting }: { greeting?: string }) {
   const data = useCustomer((s) => s.data)
   const slides = HERO_SLIDES.map((id) => data.destinations.find((x) => x.id === id)!).filter(Boolean)
-  const reduced = usePrefersReducedMotion()
   const [index, setIndex] = useState(0)
   // The photo being faded out stays fully visible underneath the one fading in, so the crossfade never dips.
   const [prev, setPrev] = useState(-1)
-  // Paused while the page is hidden or while someone is using the keyboard in the hero or the trip search.
+  // Paused while the tab is hidden or while keyboard focus is in the hero or the trip search. Focus leaving
+  // (including a click on blank page, which fires no focusin) releases it, so the slideshow never stays stuck.
+  // Reduced motion keeps the gentle crossfade (an opacity change, nothing moves) so the photos still change.
   const [held, setHeld] = useState(false)
   const [hidden, setHidden] = useState(() => typeof document !== 'undefined' && document.hidden)
   const [loaded, setLoaded] = useState<Set<number>>(() => new Set())
+  // A photo that fails to load is skipped, so one broken file never freezes the slideshow.
+  const [broken, setBroken] = useState<Set<number>>(() => new Set())
   const n = slides.length
-  const next = (index + 1) % n
-  const running = !reduced && !held && !hidden && n > 1
+  const step = (from: number, dir: 1 | -1) => {
+    for (let k = 1; k <= n; k++) {
+      const i = (from + dir * k + n) % n
+      if (!broken.has(i)) return i
+    }
+    return from
+  }
+  const next = step(index, 1)
+  const running = !held && !hidden && n > 1
+  const nextReady = loaded.has(next)
 
   useEffect(() => {
     const onVis = () => setHidden(document.hidden)
-    const onFocus = (e: FocusEvent) => setHeld(!!(e.target as Element | null)?.closest?.('[data-hero-hold]'))
+    const inHero = (el: Element | null) => !!el?.closest?.('[data-hero-hold]') && el.matches(':focus-visible')
+    const onFocus = (e: FocusEvent) => setHeld(inHero(e.target as Element | null))
+    const onBlur = () => setHeld(false)
     document.addEventListener('visibilitychange', onVis)
     document.addEventListener('focusin', onFocus)
+    document.addEventListener('focusout', onBlur)
     return () => {
       document.removeEventListener('visibilitychange', onVis)
       document.removeEventListener('focusin', onFocus)
+      document.removeEventListener('focusout', onBlur)
     }
   }, [])
   useEffect(() => {
     // Change only once the next photo has loaded, so a slow network never fades to an empty frame.
-    if (!running || !loaded.has(next)) return
+    if (!running || !nextReady) return
     const t = window.setTimeout(() => {
       setPrev(index)
       setIndex(next)
     }, SLIDE_MS)
     return () => window.clearTimeout(t)
-  }, [running, next, loaded, index])
+  }, [running, next, nextReady, index])
 
   // The photo on screen and the next two are in the page, so each one is loaded well before it shows.
-  const mounted = (i: number) => i === index || i === next || i === (index + 2) % n || loaded.has(i)
+  const mounted = (i: number) => i === index || i === next || i === step(next, 1) || i === prev || loaded.has(i)
   const first = slides[0]
 
   return (
@@ -139,7 +154,7 @@ function Hero({ greeting }: { greeting?: string }) {
           <img src={first.image.lqip} alt="" className="absolute inset-0 size-full scale-110 object-cover blur-xl" style={{ objectPosition: first.image.focus }} />
         )}
         {slides.map((dest, i) =>
-          mounted(i) && (!reduced || i === 0) ? (
+          mounted(i) && !broken.has(i) ? (
             <img
               key={dest.id}
               src={dest.image.src}
@@ -150,7 +165,8 @@ function Hero({ greeting }: { greeting?: string }) {
               fetchPriority={i === 0 ? 'high' : 'low'}
               decoding="async"
               onLoad={() => setLoaded((s) => (s.has(i) ? s : new Set(s).add(i)))}
-              style={{ objectPosition: dest.image.focus, transitionDuration: reduced ? '0ms' : `${FADE_MS}ms` }}
+              onError={() => setBroken((s) => (s.has(i) ? s : new Set(s).add(i)))}
+              style={{ objectPosition: dest.image.focus, transitionDuration: `${FADE_MS}ms` }}
               className={`absolute inset-0 size-full object-cover saturate-[0.92] transition-opacity ease-in-out ${
                 i === index && loaded.has(i) ? 'z-[2] opacity-100' : i === prev ? 'z-[1] opacity-100 transition-none' : 'opacity-0 transition-none'
               }`}
@@ -180,20 +196,9 @@ function Hero({ greeting }: { greeting?: string }) {
           </Link>
         </div>
       </div>
+
     </section>
   )
-}
-
-function usePrefersReducedMotion() {
-  const query = '(prefers-reduced-motion: reduce)'
-  const [reduced, setReduced] = useState(() => typeof matchMedia !== 'undefined' && matchMedia(query).matches)
-  useEffect(() => {
-    const m = matchMedia(query)
-    const on = () => setReduced(m.matches)
-    m.addEventListener('change', on)
-    return () => m.removeEventListener('change', on)
-  }, [])
-  return reduced
 }
 
 /* ------------------------------------------------------------------ Search */
