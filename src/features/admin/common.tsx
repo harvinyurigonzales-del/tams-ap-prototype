@@ -9,12 +9,12 @@ export const serviceOf = (d: Dataset, id: string) => d.services.find((s) => s.id
 export function Kpi({ label, value, note, to, emphasis }: { label: string; value: ReactNode; note?: ReactNode; to?: string; emphasis?: boolean }) {
   const body = (
     <>
-      <p className={`text-sm font-medium ${emphasis ? 'text-brand-100' : 'text-ink-2'}`}>{label}</p>
-      <p className={`mt-1 font-display text-2xl font-bold tnum ${emphasis ? 'text-white' : 'text-brand-900'}`}>{value}</p>
-      {note && <p className={`mt-1 text-xs ${emphasis ? 'text-brand-100' : 'text-ink-2'}`}>{note}</p>}
+      <p className={`text-sm font-medium ${emphasis ? 'text-white/80' : 'text-ink-2'}`}>{label}</p>
+      <p className={`mt-1 font-display text-2xl font-bold tnum ${emphasis ? 'text-white' : 'text-charcoal'}`}>{value}</p>
+      {note && <p className={`mt-1 text-xs ${emphasis ? 'text-white/80' : 'text-ink-2'}`}>{note}</p>}
     </>
   )
-  const cls = `block rounded-2xl p-5 shadow-card ${emphasis ? 'bg-gradient-to-br from-brand-600 to-brand-800' : 'border border-line bg-surface'} ${to ? 'transition hover:border-brand-300 hover:shadow-pop' : ''}`
+  const cls = `block rounded-2xl p-5 shadow-card ${emphasis ? 'relative overflow-hidden bg-navy' : 'border border-line bg-surface'} ${to ? 'transition hover:border-brand-300 hover:shadow-pop' : ''}`
   return to ? (
     <Link to={to} className={cls}>
       {body}
@@ -24,12 +24,12 @@ export function Kpi({ label, value, note, to, emphasis }: { label: string; value
   )
 }
 
-/** Light KPI tile used on list pages (brand-50 with brand-900 text, spec section 8). */
+/** Light KPI tile used on list pages. */
 export function MiniKpi({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="rounded-2xl bg-brand-50 px-4 py-3">
-      <p className="text-xs font-medium text-brand-700">{label}</p>
-      <p className="font-display text-xl font-bold text-brand-900 tnum">{value}</p>
+    <div className="rounded-2xl border border-line bg-surface px-4 py-3 shadow-card">
+      <p className="text-xs font-medium text-ink-2">{label}</p>
+      <p className="font-display text-xl font-bold text-charcoal tnum">{value}</p>
     </div>
   )
 }

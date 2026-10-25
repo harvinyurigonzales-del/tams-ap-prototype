@@ -8,10 +8,11 @@ import {
   type CustomInput, type RentalInput,
 } from '../domain/requests'
 import { departureAvailability, payableOptions, tourTotal } from '../domain/rules'
+import { publicName, reviewableTrips, validateReview } from '../domain/reviews'
 import { customerSeed } from '../seed/derive'
 import type {
   AppNotification, Booking, CustomRequest, Customer, Dataset, Inquiry, Interest, Payment, PaymentMethod, PaymentType, RentalRequest,
-  RentalTripType, RequestStatus, SavedItem, TravelPreferences,
+  RentalTripType, RequestStatus, Review, SavedItem, TravelPreferences,
 } from '../seed/types'
 import { nextId } from './ids'
 
@@ -60,6 +61,15 @@ export interface ChatEntry {
 }
 
 export const EMPTY_PREFS: TravelPreferences = { interests: [], budgetMax: 0, duration: 'Any', style: 'Any' }
+
+export interface NewReview {
+  bookingId: string
+  rating: number
+  title: string
+  text: string
+  suggestion?: string
+  party?: Review['party']
+}
 
 export interface NewPayment {
   bookingId: string
@@ -112,6 +122,8 @@ interface CustomerState {
   sendMessage: (inquiryId: string, text: string) => Result
   resolveInquiry: (inquiryId: string) => Result
   showSampleReply: (inquiryId: string) => Result
+  // Ratings
+  submitReview: (input: NewReview) => Result<Review>
   // Pre-travel checklist (session only)
   checklist: Record<string, string[]>
   toggleChecklist: (bookingId: string, itemId: string) => void
@@ -539,6 +551,38 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     notify(data, q.customerId, { at, category: 'Messages', title: 'Staff replied', body: `${q.subject}`, link: `/app/messages/${q.id}` })
     set({ data })
     return ok(undefined)
+  },
+
+  submitReview: (input) => {
+    const s = get()
+    if (!s.customerId) return fail('Log in to rate a trip.')
+    const trip = reviewableTrips(s.data, s.customerId).find((b) => b.id === input.bookingId)
+    // Only travellers with a completed TAMS AP trip can rate it, once per trip.
+    if (!trip) return fail('You can rate a trip after you complete it with TAMS AP.')
+    const errors = validateReview(input)
+    const first = errors.rating ?? errors.title ?? errors.text
+    if (first) return fail(first)
+    const data = structuredClone(s.data)
+    const me = data.customers.find((c) => c.id === s.customerId)!
+    const review: Review = {
+      id: nextId(data, 'review'),
+      serviceId: trip.serviceId,
+      customerId: me.id,
+      bookingId: trip.id,
+      name: publicName(me.name),
+      city: me.city.split(',')[0],
+      rating: Math.round(input.rating) as Review['rating'],
+      title: input.title.trim(),
+      text: input.text.trim(),
+      suggestion: input.suggestion?.trim() || undefined,
+      party: input.party,
+      travelDate: trip.startDate,
+      createdAt: demoNowStamp(),
+      origin: 'local',
+    }
+    data.reviews.unshift(review)
+    set({ data })
+    return ok(review)
   },
 
   toggleChecklist: (bookingId, itemId) => {

@@ -320,6 +320,42 @@ export interface ApprovedReply {
   text: string
 }
 
+/**
+ * A public rating left by a traveller after a completed trip. Only customers with a completed TAMS AP trip
+ * can write one, so every review is tied to a real trip (seeded reviews describe earlier departures).
+ */
+export interface Review {
+  id: string
+  serviceId: string
+  /** Set when the reviewer is a customer in this dataset; seeded reviews from older trips only carry a name. */
+  customerId?: string
+  bookingId?: string
+  /** Public display name, first name and last initial. */
+  name: string
+  city: string
+  rating: 1 | 2 | 3 | 4 | 5
+  title: string
+  text: string
+  /** Optional suggestion for the agency, shown separately so staff can act on it. */
+  suggestion?: string
+  /** Departure date of the trip being reviewed. */
+  travelDate: string
+  createdAt: string
+  /** Who they travelled with, for context on the review card. */
+  party?: 'Solo' | 'Couple' | 'Family' | 'Friends' | 'Officemates'
+  staffReply?: { text: string; at: string }
+  origin: Origin
+}
+
+/** One month of agency sales, used for the admin trend and forecast. */
+export interface MonthlySales {
+  /** 'YYYY-MM' */
+  month: string
+  /** Booking value of trips sold that month, whole pesos. */
+  revenue: number
+  bookings: number
+}
+
 export interface Dataset {
   customers: Customer[]
   destinations: Destination[]
@@ -339,6 +375,9 @@ export interface Dataset {
   notifications: AppNotification[]
   inquiries: Inquiry[]
   replies: ApprovedReply[]
+  reviews: Review[]
+  /** Monthly sales before the demo month (sample history for the forecast). */
+  salesHistory: MonthlySales[]
   /** Next sequence numbers for records created during the demo. */
-  next: { booking: number; payment: number; assignment: number; notification: number; customer: number; customRequest: number; rentalRequest: number; inquiry: number }
+  next: { booking: number; payment: number; assignment: number; notification: number; customer: number; customRequest: number; rentalRequest: number; inquiry: number; review: number }
 }

@@ -1,4 +1,4 @@
-import { Bot, MessageCircleQuestion, Send, UserRound, X } from 'lucide-react'
+import { MessageCircleQuestion, Send, UserRound, X } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { answerQuestion, ASSISTANT_DISCLOSURE, escalationDraft, suggestedQuestions, type AssistantContext } from '../../domain/assistant'
@@ -7,18 +7,37 @@ import { myRecords, useCustomer } from '../../state/customerStore'
 import { Button, LinkButton } from '../../ui/Button'
 import { Select, TextArea, TextField } from '../../ui/Field'
 
-/** Floating "Ask TAMS" button. Sits above the mobile bottom navigation and the safe area. */
-export function AssistantLauncher() {
-  const { open, openWith } = useAssistant()
-  if (open) return <AssistantPanel />
+/**
+ * "Ask TAMS" lives in the header next to Saved, Messages and Notifications, where people look for help,
+ * instead of floating over the page. It opens the help panel anchored under the header.
+ */
+export function AskTamsButton({ tone }: { tone: 'overlay' | 'solid' }) {
+  const { open, openWith, close } = useAssistant()
   return (
     <button
-      onClick={() => openWith(useAssistant.getState().context)}
-      className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+76px)] z-40 inline-flex h-12 items-center gap-2 rounded-full bg-brand-600 pr-4 pl-3.5 text-sm font-semibold text-white shadow-pop hover:bg-brand-700 md:right-6 md:bottom-6"
+      onClick={() => (open ? close() : openWith(useAssistant.getState().context))}
+      aria-expanded={open}
+      aria-haspopup="dialog"
+      aria-label="Ask TAMS"
+      title="Ask TAMS: quick answers about trips, prices and payments"
+      className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-full text-sm font-semibold transition-colors max-md:w-9 sm:h-10 sm:max-md:w-10 max-md:justify-center md:pr-4 md:pl-3 ${
+        tone === 'overlay'
+          ? 'text-white ring-white/45 hover:bg-white/15 md:ring-1'
+          : open
+            ? 'bg-brand-600 text-white'
+            : 'text-brand-700 ring-brand-200 hover:bg-brand-50 max-md:text-ink-2 md:ring-1'
+      }`}
     >
-      <MessageCircleQuestion className="size-5" aria-hidden /> Ask TAMS
+      <MessageCircleQuestion className="size-5" aria-hidden />
+      <span className="hidden md:inline">Ask TAMS</span>
     </button>
   )
+}
+
+/** Renders the help panel while it is open. */
+export function AssistantMount() {
+  const open = useAssistant((s) => s.open)
+  return open ? <AssistantPanel /> : null
 }
 
 function contextLabel(ctx: AssistantContext, names: (c: AssistantContext) => string | undefined) {
@@ -86,14 +105,14 @@ export function AssistantPanel() {
     <section
       role="dialog"
       aria-label="Ask TAMS assistant"
-      className="fixed inset-0 z-50 flex flex-col bg-surface md:inset-auto md:right-6 md:bottom-6 md:h-[min(620px,calc(100dvh-120px))] md:w-[400px] md:rounded-2xl md:border md:border-line md:shadow-pop"
+      className="fixed inset-0 z-50 flex flex-col bg-surface md:inset-auto md:top-[76px] md:right-6 md:h-[min(620px,calc(100dvh-100px))] md:w-[400px] md:rounded-2xl md:border md:border-line md:shadow-pop"
     >
       <header className="flex items-start gap-3 border-b border-line px-4 pt-[max(12px,env(safe-area-inset-top))] pb-3">
         <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-100 text-brand-700">
-          <Bot className="size-5" aria-hidden />
+          <MessageCircleQuestion className="size-5" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="font-display text-base font-semibold text-ink">Ask TAMS</h2>
+          <h2 className="type-head text-lg text-charcoal">Ask TAMS</h2>
           <p className="text-xs text-ink-2">{ASSISTANT_DISCLOSURE}</p>
         </div>
         <button onClick={close} className="rounded-lg p-1.5 text-ink-2 hover:bg-surface-muted" aria-label="Close assistant">

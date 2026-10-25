@@ -32,7 +32,7 @@ export function RentalLanding() {
   const data = useCustomer((s) => s.data)
   return (
     <div>
-      <h1 className="font-display text-2xl font-bold text-brand-900 md:text-[28px]">Van rental with driver</h1>
+      <h1 className="type-head text-[32px] text-charcoal md:text-[40px] md:text-[28px]">Van rental with driver</h1>
       <p className="mt-1 max-w-2xl text-sm text-ink-2">
         A private van and professional driver for your own route: family trips, outings and transfers within Luzon. Every rental comes with a driver; we don’t offer self-drive.
       </p>
@@ -46,7 +46,7 @@ export function RentalLanding() {
 
       <div className="mt-8 grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
-          <h2 className="font-display text-lg font-semibold text-brand-900">
+          <h2 className="type-head text-[22px] text-charcoal">
             How pricing works <SampleTag />
           </h2>
           <ul className="mt-3 space-y-2 text-sm text-ink-2">
@@ -59,7 +59,7 @@ export function RentalLanding() {
           </ul>
         </Card>
         <Card className="p-5">
-          <h2 className="font-display text-lg font-semibold text-brand-900">How it works</h2>
+          <h2 className="type-head text-[22px] text-charcoal">How it works</h2>
           <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-ink-2">
             <li>Send a request with your route, dates and group size. You see an estimate right away.</li>
             <li>Staff check the route and van availability, then send a quote.</li>
@@ -166,7 +166,7 @@ export function RentalRequestForm() {
   return (
     <div>
       <BackLink to="/app/rental" label="Van rental" />
-      <h1 className="font-display text-2xl font-bold text-brand-900">Request a van with driver</h1>
+      <h1 className="type-head text-[32px] text-charcoal md:text-[40px]">Request a van with driver</h1>
       <p className="mt-1 max-w-2xl text-sm text-ink-2">You’ll see an estimate as you fill this in. Staff confirm the final quote; a request does not reserve a van.</p>
       <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_340px]">
         <Card className="space-y-5 p-5">
@@ -346,7 +346,7 @@ export function RentalRequestDetails() {
         <div className="space-y-5">
           <Card className="p-5">
             <p className="text-sm text-ink-2">{r.id} · van rental request</p>
-            <h1 className="font-display text-2xl font-bold text-brand-900">
+            <h1 className="type-head text-[32px] text-charcoal md:text-[40px]">
               {cat.name} to {r.dropoff}
             </h1>
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -379,7 +379,7 @@ export function RentalRequestDetails() {
             {q && (r.status === 'Proposal ready' || r.status === 'Accepted') ? (
               <>
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <h2 className="font-display text-lg font-semibold text-brand-900">Quote from staff</h2>
+                  <h2 className="type-head text-[22px] text-charcoal">Quote from staff</h2>
                   <p className={`text-xs ${expired && r.status === 'Proposal ready' ? 'font-semibold text-bad' : 'text-ink-2'}`}>
                     Sent {fmtStamp(q.sentAt)} · valid until {fmtDate(q.validUntil, { year: false })}
                   </p>
@@ -396,7 +396,7 @@ export function RentalRequestDetails() {
               </>
             ) : (
               <>
-                <h2 className="font-display text-lg font-semibold text-brand-900">
+                <h2 className="type-head text-[22px] text-charcoal">
                   Estimate <SampleTag>Not a quote</SampleTag>
                 </h2>
                 <div className="mt-3">
@@ -412,7 +412,7 @@ export function RentalRequestDetails() {
           </Card>
 
           <Card className="p-5">
-            <h2 className="font-display text-lg font-semibold text-brand-900">Status</h2>
+            <h2 className="type-head text-[22px] text-charcoal">Status</h2>
             <Timeline steps={steps} />
           </Card>
         </div>

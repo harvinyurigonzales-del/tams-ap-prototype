@@ -32,7 +32,8 @@ describe('seeded figures (spec section 9)', () => {
     const methods = Object.fromEntries(revenueReport(d, { from: '2026-01-01', to: '2026-12-31', label: '' }).byMethod.map((m) => [m.method, m.amount]))
     expect(methods).toEqual({ GCash: 38388, 'Bank transfer': 30391, Maya: 10796 })
     const perf = performanceReport(d, OCT)
-    expect([perf.filled, perf.capacity]).toEqual([29, 108])
+    // 17 October departures of 12 seats each, including the added joiner tours.
+    expect([perf.filled, perf.capacity]).toEqual([29, 204])
   })
 
   it('customer copy starts without Maria’s scenario booking', () => {

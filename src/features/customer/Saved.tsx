@@ -12,7 +12,7 @@ export function Saved() {
   const dests = saved.filter((x) => x.kind === 'destination').map((x) => data.destinations.find((d) => d.id === x.id)).filter((d) => !!d)
   return (
     <div>
-      <h1 className="font-display text-2xl font-bold text-brand-900">Saved</h1>
+      <h1 className="type-head text-[32px] text-charcoal md:text-[40px]">Saved</h1>
       <p className="mt-1 text-sm text-ink-2">Tours and destinations you saved in this demo session.</p>
       {saved.length === 0 ? (
         <Card className="mt-5">
@@ -20,14 +20,14 @@ export function Saved() {
             icon={<Heart className="size-6" aria-hidden />}
             title="Nothing saved yet"
             body="Tap the heart on a tour or destination to keep it here."
-            action={<LinkButton to="/app/destinations">Browse destinations</LinkButton>}
+            action={<LinkButton to="/app/explore">Explore tours and places</LinkButton>}
           />
         </Card>
       ) : (
         <>
           {tours.length > 0 && (
             <section className="mt-6" aria-labelledby="saved-tours">
-              <h2 id="saved-tours" className="mb-3 font-display text-lg font-semibold text-brand-900">
+              <h2 id="saved-tours" className="mb-3 type-head text-[22px] text-charcoal">
                 Tours <span className="text-ink-3 tnum">{tours.length}</span>
               </h2>
               <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -41,7 +41,7 @@ export function Saved() {
           )}
           {dests.length > 0 && (
             <section className="mt-6" aria-labelledby="saved-dests">
-              <h2 id="saved-dests" className="mb-3 font-display text-lg font-semibold text-brand-900">
+              <h2 id="saved-dests" className="mb-3 type-head text-[22px] text-charcoal">
                 Destinations <span className="text-ink-3 tnum">{dests.length}</span>
               </h2>
               <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

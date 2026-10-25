@@ -26,6 +26,6 @@ test('manifest is served', async ({ request }) => {
   const res = await request.get('/manifest.webmanifest')
   expect(res.ok()).toBeTruthy()
   const m = await res.json()
-  expect(m.theme_color).toBe('#5B3CC4')
+  expect(m.theme_color).toBe('#1D3A7A')
   expect(m.icons).toHaveLength(3)
 })

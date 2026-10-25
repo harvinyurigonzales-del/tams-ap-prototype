@@ -26,7 +26,7 @@ export function Preferences() {
   return (
     <div className="mx-auto max-w-2xl">
       <BackLink to="/app/account" label="Account" />
-      <h1 className="font-display text-2xl font-bold text-brand-900">Travel preferences</h1>
+      <h1 className="type-head text-[32px] text-charcoal md:text-[40px]">Travel preferences</h1>
       <p className="mt-1 text-sm text-ink-2">We use these to suggest tours and destinations on your home screen. They are kept only for this demo session.</p>
       <Card className="mt-5 space-y-5 p-5">
         <fieldset>

@@ -1,142 +1,27 @@
-import { CalendarDays, Check, Clock, MapPin, MessageCircleQuestion, Search, X } from 'lucide-react'
-import { useEffect } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { bookableDeparture, catalogTours, fromPrice } from '../../domain/recommend'
+import { ArrowRight, CalendarDays, Check, Clock, MapPin, MessageCircleQuestion, PencilRuler, Users, X } from 'lucide-react'
+import { useEffect, type ReactNode } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { fromPrice } from '../../domain/recommend'
+import { ratingOf, reviewsFor } from '../../domain/reviews'
+import { BALANCE_DUE_DAYS_BEFORE, BOOKING_CUTOFF_DAYS, DOWN_PAYMENT_RATE, promoFor, shortRange } from '../../domain/rules'
+import { DEMO_TODAY } from '../../lib/demoClock'
 import { fmtDate, fmtTime, peso } from '../../lib/format'
 import { useAssistant } from '../../state/assistant'
 import { useCustomer } from '../../state/customerStore'
-import { INTERESTS, type Dataset, type Interest } from '../../seed/types'
 import { SampleTag } from '../../ui/Badge'
 import { Button, LinkButton } from '../../ui/Button'
-import { Card } from '../../ui/Card'
 import { EmptyState } from '../../ui/EmptyState'
-import { FilterSelect } from '../../ui/Field'
 import { Picture } from '../../ui/Picture'
-import { destinationOf, SaveButton, TourCard } from './Cards'
+import { RatingBadge, Stars } from '../../ui/Stars'
+import { destinationOf, PriceTag, SaveButton } from './Cards'
 import { BackLink } from './Explore'
+import { ReviewCard } from './Reviews'
 import { departuresOf } from './select'
 
-const DURATIONS = { any: 'Any length', day: 'Day trip', short: '2–3 days', long: '4+ days' } as const
-const PRICES = { any: 'Any price', '2000': 'Up to ₱2,000', '3000': 'Up to ₱3,000', '5000': 'Up to ₱5,000' } as const
-
-export function filterTours(d: Dataset, f: { q: string; dest: string; price: string; dur: string; interest: string; open: boolean }) {
-  const needle = f.q.trim().toLowerCase()
-  return catalogTours(d).filter((s) => {
-    const dest = destinationOf(d, s)
-    if (needle && !`${s.name} ${s.destination} ${dest?.name ?? ''} ${(s.interests ?? []).join(' ')}`.toLowerCase().includes(needle)) return false
-    if (f.dest && s.destinationId !== f.dest) return false
-    if (f.price !== 'any' && fromPrice(d, s) > Number(f.price)) return false
-    if (f.dur === 'day' && s.days !== 1) return false
-    if (f.dur === 'short' && (s.days < 2 || s.days > 3)) return false
-    if (f.dur === 'long' && s.days < 4) return false
-    if (f.interest && !(s.interests ?? []).includes(f.interest as Interest)) return false
-    if (f.open && !bookableDeparture(d, s.id)) return false
-    return true
-  })
-}
-
-export function TourCatalog() {
-  const data = useCustomer((s) => s.data)
-  const [params, setParams] = useSearchParams()
-  const f = {
-    q: params.get('q') ?? '',
-    dest: params.get('destination') ?? '',
-    price: params.get('price') ?? 'any',
-    dur: params.get('duration') ?? 'any',
-    interest: params.get('interest') ?? '',
-    open: params.get('open') === '1',
-  }
-  const set = (key: string, value: string) => {
-    const next = new URLSearchParams(params)
-    if (!value || value === 'any') next.delete(key)
-    else next.set(key, value)
-    setParams(next, { replace: true })
-  }
-  const results = filterTours(data, f)
-  // Bookable tours first, then by price, so unavailable tours never crowd out the ones you can book.
-  results.sort((a, b) => Number(!bookableDeparture(data, a.id)) - Number(!bookableDeparture(data, b.id)) || fromPrice(data, a) - fromPrice(data, b))
-  const filtered = params.toString().length > 0
-
-  return (
-    <div>
-      <h1 className="font-display text-2xl font-bold text-brand-900">Explore tours</h1>
-      <p className="mt-1 text-sm text-ink-2">Joiner tours with set dates. Prices are per person.</p>
-      <div className="relative mt-4">
-        <Search className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-ink-3" aria-hidden />
-        <input
-          type="search"
-          aria-label="Search tours"
-          placeholder="Search tours, places or interests"
-          value={f.q}
-          onChange={(e) => set('q', e.target.value)}
-          className="h-12 w-full rounded-2xl border border-line bg-surface pr-4 pl-12 text-[15px] shadow-card placeholder:text-ink-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-100 focus:outline-none"
-        />
-      </div>
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2" aria-label="Filters">
-        <FilterSelect label="Destination" value={f.dest} onChange={(e) => set('destination', e.target.value)}>
-          <option value="">All destinations</option>
-          {data.destinations
-            .filter((x) => catalogTours(data).some((s) => s.destinationId === x.id))
-            .map((x) => (
-              <option key={x.id} value={x.id}>
-                {x.name}
-              </option>
-            ))}
-        </FilterSelect>
-        <FilterSelect label="Price" value={f.price} onChange={(e) => set('price', e.target.value)}>
-          {Object.entries(PRICES).map(([k, v]) => (
-            <option key={k} value={k}>
-              {v}
-            </option>
-          ))}
-        </FilterSelect>
-        <FilterSelect label="Length" value={f.dur} onChange={(e) => set('duration', e.target.value)}>
-          {Object.entries(DURATIONS).map(([k, v]) => (
-            <option key={k} value={k}>
-              {v}
-            </option>
-          ))}
-        </FilterSelect>
-        <FilterSelect label="Interest" value={f.interest} onChange={(e) => set('interest', e.target.value)}>
-          <option value="">Any interest</option>
-          {INTERESTS.map((i) => (
-            <option key={i}>{i}</option>
-          ))}
-        </FilterSelect>
-        <label className="inline-flex items-center gap-2 text-sm text-ink-2">
-          <input type="checkbox" checked={f.open} onChange={(e) => set('open', e.target.checked ? '1' : '')} className="size-4 accent-brand-600" />
-          Open dates only
-        </label>
-        {filtered && (
-          <button onClick={() => setParams({}, { replace: true })} className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700 hover:underline">
-            <X className="size-4" aria-hidden /> Clear filters
-          </button>
-        )}
-      </div>
-      <p className="mt-4 text-sm text-ink-2" aria-live="polite">
-        {results.length} {results.length === 1 ? 'tour' : 'tours'}
-      </p>
-      <div className="mt-3">
-        {results.length === 0 ? (
-          <Card>
-            <EmptyState
-              title="No tours match these filters"
-              body="Clear a filter, or plan a custom trip and staff will put one together for you."
-              action={<LinkButton to="/app/custom/new">Plan a custom trip</LinkButton>}
-            />
-          </Card>
-        ) : (
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {results.map((s) => (
-              <li key={s.id}>
-                <TourCard service={s} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  )
+/** "Day 1: Depart Manila, …" → { when: 'Day 1', what: 'Depart Manila, …' }. */
+const splitStep = (line: string) => {
+  const i = line.indexOf(': ')
+  return i > 0 && i < 16 ? { when: line.slice(0, i), what: line.slice(i + 2) } : { when: '', what: line }
 }
 
 export function TourDetails() {
@@ -148,130 +33,286 @@ export function TourDetails() {
   useEffect(() => {
     if (s) markViewed('tour', s.id)
   }, [s, markViewed])
-  if (!s) return <EmptyState title="Tour not found" action={<LinkButton to="/app/tours">Explore tours</LinkButton>} />
+  if (!s) return <EmptyState title="Tour not found" action={<LinkButton to="/app/explore">Explore tours</LinkButton>} />
   const dest = destinationOf(data, s)
   const deps = departuresOf(data, s.id)
-  const anyOpen = deps.some((d) => d.avail.state === 'open')
+  const open = deps.filter((d) => d.avail.state === 'open')
+  const next = open[0]
+  const price = next ? fromPrice(data, s) : s.price
+  const reviews = reviewsFor(data, s.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  const rating = ratingOf(reviews)
 
   return (
     <div>
-      <BackLink to="/app/tours" label="Explore tours" />
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-        <div>
-          {dest && <Picture image={dest.image} className="h-52 rounded-3xl md:h-72" />}
-          <div className="mt-5 flex items-start justify-between gap-3">
-            <h1 className="font-display text-[28px] leading-tight font-bold text-brand-900">{s.name}</h1>
-            <SaveButton item={{ kind: 'tour', id: s.id }} name={s.name} withLabel className="shrink-0" />
-          </div>
-          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-2">
+      <BackLink to="/app/explore" label="Explore" />
+      <div className="relative">
+        {dest ? (
+          <Picture image={dest.image} eager className="aspect-[4/3] rounded-[28px] sm:aspect-[16/8] lg:aspect-[21/8]" labelAt="tr" />
+        ) : (
+          <div className="aspect-[16/8] rounded-[28px] bg-sand" />
+        )}
+        <div className="pointer-events-none absolute inset-0 rounded-[28px] bg-gradient-to-t from-black/75 via-black/20 to-transparent" aria-hidden />
+        <div className="absolute inset-x-0 bottom-0 p-5 text-white sm:p-8">
+          <p className="flex flex-wrap items-center gap-2 text-sm text-white/90">
+            <span className="rounded-full bg-white/92 px-2.5 py-1 text-xs font-semibold text-charcoal">Joiner tour</span>
             <span className="inline-flex items-center gap-1">
               <MapPin className="size-4" aria-hidden /> {s.destination}
             </span>
-            <span className="inline-flex items-center gap-1">
-              <Clock className="size-4" aria-hidden /> {s.duration}
-            </span>
-            {dest && (
-              <Link to={`/app/destinations/${dest.id}`} className="font-semibold text-brand-700 hover:underline">
-                About {dest.name}
-              </Link>
-            )}
           </p>
-          {s.interests && (
-            <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Good for">
-              {s.interests.map((i) => (
-                <li key={i} className="rounded-full bg-surface-muted px-2.5 py-1 text-xs font-medium text-ink-2">
-                  {i}
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="mt-4 text-ink">{s.summary}</p>
+          <h1 className="mt-2 type-hero text-[34px] sm:text-[46px] lg:text-[60px]">{s.name}</h1>
+          <a href="#reviews" className="pointer-events-auto mt-3 inline-flex rounded-full hover:underline">
+            <RatingBadge avg={rating.avg} count={rating.count} tone="inverse" />
+          </a>
+        </div>
+      </div>
 
-          <h2 className="mt-6 font-display text-lg font-semibold text-brand-900">Itinerary</h2>
-          <ol className="mt-2 space-y-2 text-sm text-ink">
-            {s.itinerary.map((i) => (
-              <li key={i} className="rounded-xl bg-surface px-4 py-3 shadow-card ring-1 ring-line">
-                {i}
-              </li>
-            ))}
-          </ol>
+      <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_380px]">
+        <div className="min-w-0">
+          <div className="flex items-start justify-between gap-4">
+            <p className="max-w-2xl text-lg text-ink">{s.summary}</p>
+            <SaveButton item={{ kind: 'tour', id: s.id }} name={s.name} withLabel className="shrink-0" />
+          </div>
+
+          <dl className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-[22px] bg-line ring-1 ring-line sm:grid-cols-3">
+            <Fact icon={<Clock className="size-4" aria-hidden />} label="Length">
+              {s.duration}
+            </Fact>
+            <Fact icon={<MapPin className="size-4" aria-hidden />} label="Pickup point">
+              {s.pickup}
+            </Fact>
+            <Fact icon={<CalendarDays className="size-4" aria-hidden />} label="Pickup time">
+              {fmtTime(s.pickupTime)}
+            </Fact>
+            <Fact icon={<Users className="size-4" aria-hidden />} label="Arrangement">
+              Joiner tour, shared van
+            </Fact>
+            <Fact label="Price">{peso(price)} per person</Fact>
+            <Fact label="Good for">{(s.interests ?? []).join(', ') || 'Everyone'}</Fact>
+          </dl>
+
+          <section className="mt-10" aria-labelledby="plan">
+            <h2 id="plan" className="type-head text-[30px] text-charcoal">
+              Ang plano
+            </h2>
+            <p className="mt-1 text-sm text-ink-2">The day-by-day plan for this package.</p>
+            <ol className="mt-5">
+              <RouteStop first when={fmtTime(s.pickupTime)} what={`Pickup at ${s.pickup}`} />
+              {s.itinerary.map((line, i) => {
+                const st = splitStep(line)
+                return <RouteStop key={line} when={st.when} what={st.what} last={i === s.itinerary.length - 1} />
+              })}
+            </ol>
+          </section>
+
           <Inclusions inclusions={s.inclusions} exclusions={s.exclusions} />
+
+          <section className="mt-10" aria-labelledby="schedule">
+            <h2 id="schedule" className="type-head text-[30px] text-charcoal">
+              Schedule
+            </h2>
+            {deps.length === 0 ? (
+              <p className="mt-2 text-sm text-ink-2">No upcoming departures are scheduled.</p>
+            ) : (
+              <ul className="mt-4 divide-y divide-line overflow-hidden rounded-[22px] bg-surface ring-1 ring-line">
+                {deps.map(({ dep, avail }) => {
+                  const off = promoFor(dep, DEMO_TODAY)
+                  return (
+                    <li key={dep.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-ink">{shortRange(dep.startDate, dep.endDate)}</p>
+                        <p className="text-sm text-ink-2">
+                          {fmtDate(dep.startDate, { weekday: true, year: false }).split(',')[0]} departure
+                          {off > 0 && <span className="block font-semibold text-sili sm:ml-2 sm:inline">{dep.promo!.label}: {peso(off)} off</span>}
+                        </p>
+                      </div>
+                      <p className={`text-sm font-semibold ${avail.state === 'open' ? (avail.left <= 4 ? 'text-sili' : 'text-palay') : 'text-ink-3'}`}>
+                        {avail.state === 'open' ? `${avail.left} seats left` : avail.state === 'full' ? 'Full' : 'Booking closed'}
+                      </p>
+                      {avail.state === 'open' && (
+                        <Link
+                          to={`/app/tours/${s.id}/dates?d=${dep.id}`}
+                          className="inline-flex h-10 items-center rounded-full bg-sili px-4 text-sm font-semibold text-white hover:bg-sili-600"
+                          aria-label={`Book ${shortRange(dep.startDate, dep.endDate)}`}
+                        >
+                          Book
+                        </Link>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </section>
+
+          <section className="mt-10 scroll-mt-24" id="reviews" aria-labelledby="reviews-h">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 id="reviews-h" className="type-head text-[30px] text-charcoal">
+                  Kuwento ng biyahe
+                </h2>
+                <p className="mt-1 text-sm text-ink-2">Reviews from travellers who joined this tour. Only completed trips can be reviewed.</p>
+              </div>
+              {rating.count > 0 && (
+                <Link to={`/app/reviews?tour=${s.id}`} className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700 hover:underline">
+                  See all {rating.count} reviews <ArrowRight className="size-4" aria-hidden />
+                </Link>
+              )}
+            </div>
+            {rating.count === 0 ? (
+              <p className="mt-4 rounded-[18px] bg-sand/70 px-5 py-4 text-sm text-ink-2">No reviews yet. Travellers can rate this tour after their trip.</p>
+            ) : (
+              <>
+                <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-[22px] bg-surface px-5 py-4 ring-1 ring-line">
+                  <p className="flex items-baseline gap-2">
+                    <span className="type-hero text-[40px] text-charcoal tnum">{rating.avg.toFixed(1)}</span>
+                    <span className="text-sm text-ink-2">out of 5</span>
+                  </p>
+                  <div>
+                    <Stars value={rating.avg} size="lg" />
+                    <p className="mt-1 text-sm text-ink-2">
+                      From {rating.count} completed {rating.count === 1 ? 'trip' : 'trips'}
+                    </p>
+                  </div>
+                </div>
+                <ul className="mt-4 grid gap-3">
+                  {reviews.slice(0, 3).map((r) => (
+                    <li key={r.id}>
+                      <ReviewCard review={r} showTour={false} />
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </section>
+
+          <section className="mt-10" aria-labelledby="conditions">
+            <h2 id="conditions" className="type-head text-[30px] text-charcoal">
+              Before you book
+            </h2>
+            <ul className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+              <Condition title={`${DOWN_PAYMENT_RATE * 100}% down payment holds your seat`}>
+                Pay by GCash, Maya or bank transfer and upload your receipt. Staff verify it before your booking is confirmed.
+              </Condition>
+              <Condition title={`Balance due ${BALANCE_DUE_DAYS_BEFORE} days before`}>The remaining balance is due {BALANCE_DUE_DAYS_BEFORE} days before the departure date.</Condition>
+              <Condition title={`Online booking closes ${BOOKING_CUTOFF_DAYS} days before`}>After that, message us and staff will check if a seat can still be added.</Condition>
+              <Condition title="Cancellations">Request a cancellation from My Trips any time before the travel date. Staff review each request and contact you.</Condition>
+            </ul>
+            <p className="mt-3 text-xs text-ink-3">
+              Payment rules shown here are the prototype’s sample policy.
+              <SampleTag />
+            </p>
+          </section>
         </div>
 
         <aside className="lg:sticky lg:top-24 lg:self-start">
-          <Card className="p-5">
-            <p>
-              <span className="font-display text-2xl font-bold text-brand-700 tnum">{peso(anyOpen ? fromPrice(data, s) : s.price)}</span>
-              <span className="text-sm text-ink-2">/person</span>
-            </p>
-            <p className="mt-2 text-sm text-ink-2">
-              Pickup: {s.pickup}, {fmtTime(s.pickupTime)}
+          <div className="rounded-[22px] bg-surface p-6 ring-1 ring-line">
+            <PriceTag price={price} was={next && price < s.price ? s.price : undefined} size="lg" />
+            <a href="#reviews" className="mt-2 inline-flex hover:underline">
+              <RatingBadge avg={rating.avg} count={rating.count} />
+            </a>
+            <p className="mt-3 text-sm text-ink-2">
+              {next ? (
+                <>
+                  Next departure <span className="font-semibold text-ink">{fmtDate(next.dep.startDate, { weekday: true, year: false })}</span>, {next.avail.left} seats left
+                </>
+              ) : (
+                'No open departures right now, so this tour can’t be booked online.'
+              )}
             </p>
             <p className="mt-1 text-sm text-ink-2">
-              50% down payment holds your booking
-              <SampleTag />
+              Pickup {fmtTime(s.pickupTime)} at {s.pickup}
             </p>
-            {deps.length > 0 && (
-              <ul className="mt-4 space-y-1.5 text-sm">
-                {deps.slice(0, 4).map(({ dep, avail }) => (
-                  <li key={dep.id} className="flex justify-between">
-                    <span>{fmtDate(dep.startDate, { weekday: true, year: false })}</span>
-                    <span className={avail.state === 'open' ? 'font-medium text-ok' : 'text-ink-3'}>
-                      {avail.state === 'open' ? `${avail.left} left` : avail.state === 'full' ? 'Full' : 'Closed'}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
             <div className="mt-5 grid gap-2">
-              {anyOpen ? (
+              {next ? (
                 <LinkButton to={`/app/tours/${s.id}/dates`} size="lg" full>
                   <CalendarDays className="size-5" aria-hidden /> View dates
                 </LinkButton>
               ) : (
-                <>
-                  <p className="rounded-xl bg-surface-muted px-4 py-3 text-center text-sm text-ink-2">No open departures right now, so this tour can’t be booked online.</p>
-                  {dest && (
-                    <LinkButton to={`/app/custom/new?destination=${dest.id}`} variant="secondary" size="lg" full>
-                      Plan a custom trip to {dest.name}
-                    </LinkButton>
-                  )}
-                </>
+                dest && (
+                  <LinkButton to={`/app/custom/new?destination=${dest.id}`} size="lg" full>
+                    <PencilRuler className="size-5" aria-hidden /> Plan a custom trip to {dest.name}
+                  </LinkButton>
+                )
               )}
               <Button variant="ghost" full icon={<MessageCircleQuestion className="size-4" aria-hidden />} onClick={() => openWith({ kind: 'tour', id: s.id })}>
                 Ask about this tour
               </Button>
             </div>
-          </Card>
+            {dest && (
+              <p className="mt-4 border-t border-line pt-4 text-sm text-ink-2">
+                New to {dest.name}?{' '}
+                <Link to={`/app/destinations/${dest.id}`} className="font-semibold text-brand-700 hover:underline">
+                  Read about the place
+                </Link>
+              </p>
+            )}
+          </div>
         </aside>
       </div>
     </div>
   )
 }
 
+function Fact({ icon, label, children }: { icon?: ReactNode; label: string; children: ReactNode }) {
+  return (
+    <div className="bg-surface px-4 py-4">
+      <dt className="flex items-center gap-1.5 text-xs font-semibold text-ink-2">
+        {icon}
+        {label}
+      </dt>
+      <dd className="mt-1 text-[15px] font-medium text-ink">{children}</dd>
+    </div>
+  )
+}
+
+/** One stop on the plan, drawn on the dashed route line that runs through the customer app. */
+function RouteStop({ when, what, first = false, last = false }: { when: string; what: string; first?: boolean; last?: boolean }) {
+  return (
+    <li className="relative flex gap-4 pb-6 last:pb-0">
+      {!last && <span className="route-line-y absolute top-5 bottom-0 left-[9px] w-0.5 text-line-strong" aria-hidden />}
+      <span className={`relative mt-1 grid size-5 shrink-0 place-items-center rounded-full ${first ? 'bg-sili' : 'border-2 border-brand-600 bg-surface'}`} aria-hidden>
+        {first && <span className="size-1.5 rounded-full bg-white" />}
+      </span>
+      <div className="min-w-0">
+        {when && <p className="text-xs font-semibold text-brand-700">{when}</p>}
+        <p className="text-[15px] text-ink">{what}</p>
+      </div>
+    </li>
+  )
+}
+
+function Condition({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <li className="rounded-[18px] bg-sand/70 px-5 py-4">
+      <p className="font-semibold text-ink">{title}</p>
+      <p className="mt-1 text-ink-2">{children}</p>
+    </li>
+  )
+}
+
 export function Inclusions({ inclusions, exclusions }: { inclusions: string[]; exclusions: string[] }) {
   return (
-    <div className="mt-6 grid gap-4 sm:grid-cols-2">
+    <section className="mt-10 grid gap-6 sm:grid-cols-2" aria-label="What’s included">
       <div>
-        <h2 className="font-display text-lg font-semibold text-brand-900">Inclusions</h2>
-        <ul className="mt-2 space-y-1.5 text-sm">
+        <h2 className="type-head text-[24px] text-charcoal">Included</h2>
+        <ul className="mt-3 space-y-2 text-[15px]">
           {inclusions.map((i) => (
-            <li key={i} className="flex gap-2">
-              <Check className="mt-0.5 size-4 shrink-0 text-ok" aria-hidden /> {i}
+            <li key={i} className="flex gap-2.5">
+              <Check className="mt-0.5 size-5 shrink-0 text-palay" aria-hidden /> {i}
             </li>
           ))}
         </ul>
       </div>
       <div>
-        <h2 className="font-display text-lg font-semibold text-brand-900">Not included</h2>
-        <ul className="mt-2 space-y-1.5 text-sm">
+        <h2 className="type-head text-[24px] text-charcoal">Not included</h2>
+        <ul className="mt-3 space-y-2 text-[15px]">
           {exclusions.map((i) => (
-            <li key={i} className="flex gap-2">
-              <X className="mt-0.5 size-4 shrink-0 text-ink-3" aria-hidden /> {i}
+            <li key={i} className="flex gap-2.5">
+              <X className="mt-0.5 size-5 shrink-0 text-ink-3" aria-hidden /> {i}
             </li>
           ))}
         </ul>
       </div>
-    </div>
+    </section>
   )
 }

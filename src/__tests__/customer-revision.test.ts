@@ -146,7 +146,7 @@ describe('recommendations', () => {
   })
 
   it('history rows only come from the customer’s own completed trips', () => {
-    expect(recommendationRows(d, maria()).find((r) => r.id === 'history')?.title).toBe('Inspired by your Tagaytay trip')
+    expect(recommendationRows(d, maria()).find((r) => r.id === 'history')?.title).toBe('Because you went to Tagaytay')
     const paolo = recommendationRows(d, { customerId: 'CUS-0011', saved: [], viewed: [], dismissed: [] })
     expect(paolo.map((r) => r.id)).toEqual(['departures', 'destinations'])
   })
