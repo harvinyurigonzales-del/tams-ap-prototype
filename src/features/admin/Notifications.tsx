@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { dashboard } from '../../domain/metrics'
 import { needsReply } from '../../domain/reviews'
-import { useAdmin } from '../../state/adminStore'
+import { staffNotifications, useAdmin } from '../../state/adminStore'
 import type { NotificationCategory } from '../../seed/types'
 import { Button } from '../../ui/Button'
 import { Card, SectionTitle } from '../../ui/Card'
@@ -13,13 +13,14 @@ import { ActivityList, Tabs } from './common'
 import { overdueCount } from './Maintenance'
 
 type Filter = 'All' | 'Unread' | NotificationCategory
-const CATEGORIES: NotificationCategory[] = ['Bookings', 'Payments', 'Travel', 'Fleet', 'Requests']
+const CATEGORIES: NotificationCategory[] = ['Bookings', 'Payments', 'Travel', 'Fleet', 'Requests', 'Messages']
 
 export function AdminNotifications() {
   const { data, maintenance, markAllRead } = useAdmin()
   const [f, setF] = useState<Filter>('All')
-  const list = data.notifications.filter((n) => f === 'All' || (f === 'Unread' ? !n.read : n.category === f))
-  const unread = (c: NotificationCategory) => data.notifications.filter((n) => !n.read && n.category === c).length
+  const all = staffNotifications(data).sort((a, b) => b.at.localeCompare(a.at))
+  const list = all.filter((n) => f === 'All' || (f === 'Unread' ? !n.read : n.category === f))
+  const unread = (c: NotificationCategory) => all.filter((n) => !n.read && n.category === c).length
   const k = dashboard(data)
   const todo = [
     { label: 'Payments to verify', n: data.payments.filter((p) => p.status === 'Submitted').length, to: '/admin/bookings?payment=Submitted' },
@@ -33,9 +34,9 @@ export function AdminNotifications() {
     <div>
       <PageHeader
         title="Notifications"
-        subtitle="Activity in the admin portal. Customers get their own updates in the TAMS app."
+        subtitle="Customer activity and staff updates. Customers get their own notifications on the customer site."
         actions={
-          <Button variant="secondary" onClick={markAllRead} disabled={data.notifications.every((n) => n.read)}>
+          <Button variant="secondary" onClick={markAllRead} disabled={all.every((n) => n.read)}>
             Mark all as read
           </Button>
         }

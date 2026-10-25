@@ -262,7 +262,7 @@ export function Result() {
       </div>
 
       {/* Mobile: the main action stays reachable above the tab bar; the page has room below for it. */}
-      <div className="fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 border-t border-line bg-surface/95 px-4 py-2.5 backdrop-blur lg:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/95 px-4 pt-2.5 pb-[calc(10px+env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
           <div>
             <p className="tnum text-base font-bold text-charcoal">{peso(est.perPerson)} <span className="text-xs font-medium text-ink-2">per person</span></p>

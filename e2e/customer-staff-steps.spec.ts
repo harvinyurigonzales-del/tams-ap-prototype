@@ -1,4 +1,4 @@
-import { expect, test, type Page } from './fixtures'
+import { expect, test, type Page, signInSample } from './fixtures'
 
 async function pay(page: Page) {
   await page.getByRole('button', { name: 'Use sample payment details' }).click()
@@ -10,7 +10,7 @@ async function pay(page: Page) {
 
 test('presenter plays the staff side of a booking, and every step notifies the customer', async ({ page }) => {
   await page.goto('/app/book/DEP-BAG-1017?pax=2')
-  await page.getByRole('button', { name: 'Use sample account' }).click()
+  await signInSample(page, 'Maria Santos')
   await expect(page.getByRole('heading', { name: 'Booking details' })).toBeVisible()
   await page.getByRole('button', { name: 'Review booking' }).click()
   await page.getByRole('button', { name: 'Submit booking' }).click()
@@ -36,14 +36,15 @@ test('presenter plays the staff side of a booking, and every step notifies the c
   await expect(page.getByText('Completed').first()).toBeVisible()
   await expect(page.getByText('Presenter shortcut')).toHaveCount(0)
 
-  await page.getByRole('link', { name: /Notifications/ }).first().click()
+  await page.getByRole('button', { name: /^Notifications/ }).click()
+  await page.getByRole('link', { name: 'View all notifications' }).click()
   for (const t of ['Booking received', 'Payment submitted', 'Payment needs a new proof', 'Payment verified', 'Booking confirmed', 'Trip reminder', 'Trip completed'])
     await expect(page.getByText(t, { exact: true }).first()).toBeVisible()
 })
 
 test('cancellation request can be approved by staff', async ({ page }) => {
   await page.goto('/app/book/DEP-BAG-1017?pax=1')
-  await page.getByRole('button', { name: 'Use sample account' }).click()
+  await signInSample(page, 'Maria Santos')
   await page.getByRole('button', { name: 'Review booking' }).click()
   await page.getByRole('button', { name: 'Submit booking' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Submit booking' }).click()

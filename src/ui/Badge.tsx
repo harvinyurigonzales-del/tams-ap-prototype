@@ -54,9 +54,9 @@ export function StatusBadge({ status, customer = false }: { status: string; cust
   return <Badge tone={STATUS_TONE[status] ?? 'neutral'}>{customer ? (LABEL[status] ?? status) : status}</Badge>
 }
 
-/** Marks records created during this demo session (spec section 9). */
+/** Marks records created on the site since the sample data was loaded. */
 export function LocalTag() {
-  return <Badge tone="info" className="h-5 px-2 text-[11px]">Created in this demo</Badge>
+  return <Badge tone="info" className="h-5 px-2 text-[11px]">New</Badge>
 }
 
 export function SampleTag({ children = 'Sample policy' }: { children?: ReactNode }) {

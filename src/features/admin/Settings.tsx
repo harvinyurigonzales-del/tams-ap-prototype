@@ -1,9 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { LogOut } from 'lucide-react'
-import { ResetDemoButton } from '../../app/ResetDemo'
 import { useAdmin, useIsAdmin, useMe, type BusinessSettings } from '../../state/adminStore'
-import { usePresenter } from '../../state/presenter'
 import { useUi } from '../../state/ui'
 import { Badge } from '../../ui/Badge'
 import { Button } from '../../ui/Button'
@@ -37,7 +35,6 @@ export function Settings() {
 function General() {
   const { settings, saveSettings } = useAdmin()
   const admin = useIsAdmin()
-  const presenter = usePresenter()
   const toast = useUi((s) => s.toast)
   const [f, setF] = useState<BusinessSettings>(settings)
   const [error, setError] = useState('')
@@ -93,9 +90,6 @@ function General() {
         <Row label="Build">
           {__COMMIT__} · {__BUILD_TIME__.slice(0, 10)}
         </Row>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {presenter && admin && <ResetDemoButton variant="danger" />}
-        </div>
       </Card>
     </>
   )
@@ -128,8 +122,8 @@ function Account() {
             variant="secondary"
             icon={<LogOut className="size-4" aria-hidden />}
             onClick={() => {
-              logout()
               navigate('/admin/login', { replace: true })
+              logout()
             }}
           >
             Log out

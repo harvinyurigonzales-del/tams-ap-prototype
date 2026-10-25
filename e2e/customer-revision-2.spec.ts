@@ -1,31 +1,33 @@
-import { expect, test } from './fixtures'
+import { expect, test, signInSample } from './fixtures'
 
 // Second revision round: hero slideshow, looping carousels, floating assistant, sign-in page and demo helpers.
 
-test('hero slideshow cycles on its own, pauses on interaction and keeps the search in place', async ({ page }) => {
+test('hero photos crossfade about every 2 seconds behind steady text, and hold while the search is in use', async ({ page }) => {
   await page.goto('/app')
-  const controls = page.getByRole('group', { name: 'Slideshow controls' })
-  await expect(controls.getByText('1/10')).toBeVisible()
-  // No visible pause button; it advances by itself about every 3 seconds.
-  await expect(page.getByRole('button', { name: /Pause slideshow|Play slideshow/ })).toHaveCount(0)
-  await expect(controls.getByText('2/10')).toBeVisible({ timeout: 8000 })
-  // Pointer on the controls holds the current photo.
-  await controls.hover()
-  const held = await controls.locator('span[aria-label^="Photo"]').textContent()
-  await page.waitForTimeout(3600)
-  await expect(controls.locator('span[aria-label^="Photo"]')).toHaveText(held!)
-  await controls.getByRole('button', { name: 'Previous photo' }).click()
-  await controls.getByRole('button', { name: 'Previous photo' }).click()
-  await controls.getByRole('button', { name: 'Next photo' }).click()
-  await controls.getByRole('button', { name: 'Next photo' }).click()
-  await expect(controls.locator('span[aria-label^="Photo"]')).toHaveText(held!)
+  const frame = page.locator('[data-slide]')
+  const title = await page.locator('#hero-title').textContent()
+  await expect(frame).toHaveAttribute('data-slide', '0')
+  await expect(frame).toHaveAttribute('data-slide', '1', { timeout: 6000 })
+  await expect(frame).toHaveAttribute('data-slide', '2', { timeout: 6000 })
+  await expect(page.locator('#hero-title')).toHaveText(title!)
+  // No caption, link, credit or slideshow controls on the photo.
+  await expect(page.getByRole('group', { name: 'Slideshow controls' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Pause slideshow|Play slideshow|Next photo|Previous photo/ })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: /^See tours to/ })).toHaveCount(0)
+  await expect(page.locator('section[data-hero-hold]').getByText(/Photo:|©|Unsplash|Wikimedia/)).toHaveCount(0)
+  // Keyboard focus in the hero search holds the current photo.
+  await page.getByRole('search', { name: 'Find a trip' }).locator('input, select, button').first().focus()
+  const held = await frame.getAttribute('data-slide')
+  await page.waitForTimeout(3000)
+  await expect(frame).toHaveAttribute('data-slide', held!)
+})
+
+test('reduced motion shows one still hero photo', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/app')
-  await controls.getByRole('button', { name: 'Next photo' }).click()
-  await expect(controls.getByText('2/10')).toBeVisible()
-  await controls.getByRole('button', { name: 'Previous photo' }).click()
-  await controls.getByRole('button', { name: 'Previous photo' }).click()
-  await expect(controls.getByText('10/10')).toBeVisible()
-  await expect(page.getByRole('search', { name: 'Find a trip' }).or(page.getByLabel('Find a trip')).first()).toBeVisible()
+  await page.waitForTimeout(3000)
+  await expect(page.locator('[data-slide]')).toHaveAttribute('data-slide', '0')
+  await expect(page.locator('[data-slide] img[srcset]')).toHaveCount(1)
 })
 
 test('carousels loop with edge arrows and count each card once for keyboard users', async ({ page }) => {
@@ -44,7 +46,7 @@ test('carousels loop with edge arrows and count each card once for keyboard user
   expect(scrollbar).toBe(0)
 })
 
-test('floating Ask TAMS launcher opens the chat above it and keeps the conversation', async ({ page }) => {
+test('desktop Ask TAMS launcher opens the chat above it, and closing starts fresh', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.goto('/app')
   const launcher = page.getByRole('button', { name: 'Ask TAMS', exact: true })
@@ -57,21 +59,21 @@ test('floating Ask TAMS launcher opens the chat above it and keeps the conversat
   const pbox = (await panel.boundingBox())!
   expect(pbox.y + pbox.height).toBeLessThanOrEqual(box.y + 4)
   await panel.getByRole('group', { name: 'Suggested questions' }).getByRole('button').first().click()
-  await expect(panel.locator('.fade-in').nth(1)).toBeVisible()
-  await page.getByRole('button', { name: 'Close Ask TAMS' }).click()
+  await expect(panel.getByRole('log').locator('p.bg-brand-600')).toHaveCount(1)
+  await page.getByRole('button', { name: /^Close/ }).first().click()
   await launcher.click()
-  await expect(panel.locator('.fade-in').nth(1)).toBeVisible()
+  await expect(panel.getByRole('log').locator('p.bg-brand-600')).toHaveCount(0)
+  await expect(panel.getByRole('group', { name: 'Suggested questions' }).getByRole('button').first()).toBeVisible()
 })
 
-test('sign-in page: Google is honest without a client ID, demo is separate, and booking context returns', async ({ page }) => {
+test('one login page with no fake social buttons, and the booking context returns after login', async ({ page }) => {
   await page.goto('/app/login?next=%2Fapp%2Fexplore')
-  await page.getByRole('button', { name: 'Continue with Google' }).click()
-  await expect(page.getByRole('dialog', { name: /Google sign-in isn.t available yet/ })).toBeVisible()
-  await page.getByRole('button', { name: 'Close' }).click()
+  await expect(page.getByRole('button', { name: /Continue with (Google|Facebook|Apple)/ })).toHaveCount(0)
+  await expect(page.getByRole('radio', { name: /Customer|Staff|Admin/ })).toHaveCount(0)
   await page.getByLabel('Password', { exact: true }).fill('x')
   await page.getByRole('button', { name: /show password/i }).click()
   await expect(page.getByLabel('Password', { exact: true })).toHaveAttribute('type', 'text')
-  await page.getByRole('button', { name: 'Use sample account' }).click()
+  await signInSample(page, 'Maria Santos')
   await expect(page).toHaveURL(/\/app\/explore/)
 })
 

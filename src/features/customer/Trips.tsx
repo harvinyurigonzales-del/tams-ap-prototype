@@ -14,6 +14,7 @@ import { Card, Row } from '../../ui/Card'
 import { ConfirmDialog } from '../../ui/Dialog'
 import { EmptyState } from '../../ui/EmptyState'
 import { Picture } from '../../ui/Picture'
+import { Stars } from '../../ui/Stars'
 import { bookingTitle } from './Book'
 import { BackLink } from './Explore'
 import { AskAboutButton, SimulateBooking, RequestStatusBadge } from './Requests'
@@ -25,8 +26,9 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'custom', label: 'Custom requests' },
   { key: 'rental', label: 'Van rental requests' },
 ]
-type Group = 'Upcoming' | 'Past' | 'Cancelled'
-const groupOf = (b: Booking): Group => (b.status === 'Cancelled' ? 'Cancelled' : b.status === 'Completed' || b.endDate < DEMO_TODAY ? 'Past' : 'Upcoming')
+type Group = 'Upcoming' | 'Completed trips' | 'Past' | 'Cancelled'
+const groupOf = (b: Booking): Group =>
+  b.status === 'Cancelled' ? 'Cancelled' : b.status === 'Completed' ? 'Completed trips' : b.endDate < DEMO_TODAY ? 'Past' : 'Upcoming'
 
 /** Image for a booking: the tour's destination, the custom trip's destination, or the van category. */
 function bookingImage(d: Dataset, b: Booking) {
@@ -110,12 +112,12 @@ function BookingList({ bookings }: { bookings: Booking[] }) {
     )
   return (
     <div className="space-y-6">
-      {(['Upcoming', 'Past', 'Cancelled'] as Group[]).map((g) => {
+      {(['Upcoming', 'Completed trips', 'Past', 'Cancelled'] as Group[]).map((g) => {
         const rows = bookings.filter((b) => groupOf(b) === g).sort((a, b) => (g === 'Upcoming' ? a.startDate.localeCompare(b.startDate) : b.startDate.localeCompare(a.startDate)))
         if (!rows.length) return null
         return (
-          <section key={g} aria-labelledby={`grp-${g}`}>
-            <h2 id={`grp-${g}`} className="mb-2 text-sm font-semibold text-ink-2">
+          <section key={g} aria-labelledby={`grp-${g.replace(/\s/g, '-')}`}>
+            <h2 id={`grp-${g.replace(/\s/g, '-')}`} className="mb-2 text-sm font-semibold text-ink-2">
               {g} <span className="text-ink-3 tnum">{rows.length}</span>
             </h2>
             <ul className="space-y-3">
@@ -141,6 +143,11 @@ function BookingList({ bookings }: { bookings: Booking[] }) {
                         </div>
                         {pay && m.submitted.length === 0 && <p className="mt-1 text-xs font-semibold text-warn">Next: pay the down payment</p>}
                         {b.requestId && <p className="mt-1 text-xs text-ink-2">From request {b.requestId}</p>}
+                        {b.status === 'Completed' && (
+                          <p className={`mt-1 text-xs font-semibold ${data.reviews.some((r) => r.bookingId === b.id) ? 'text-ok' : 'text-brand-700'}`}>
+                            {data.reviews.some((r) => r.bookingId === b.id) ? 'Reviewed' : 'Rate your trip'}
+                          </p>
+                        )}
                       </div>
                       <ChevronRight className="size-5 shrink-0 text-ink-3" aria-hidden />
                     </Link>
@@ -312,6 +319,7 @@ export function TripDetails() {
               <AskAboutButton kind="booking" id={b.id} />
             </div>
           </Card>
+          {b.status === 'Completed' && <RateTrip bookingId={b.id} />}
           <SimulateBooking booking={b} />
         </aside>
       </div>
@@ -409,6 +417,28 @@ function PreTravel({ booking: b }: { booking: Booking }) {
         })}
       </ul>
       
+    </Card>
+  )
+}
+
+/** On a completed booking: rate it, or see the rating already given. */
+function RateTrip({ bookingId }: { bookingId: string }) {
+  const review = useCustomer((s) => s.data.reviews.find((r) => r.bookingId === bookingId))
+  return (
+    <Card className="p-5">
+      <h2 className="type-head text-[20px] text-charcoal">{review ? 'Your review' : 'How was your trip?'}</h2>
+      {review ? (
+        <p className="mt-2 flex items-center gap-2 text-sm text-ink-2">
+          <Stars value={review.rating} /> <span>You rated this trip {review.rating} out of 5.</span>
+        </p>
+      ) : (
+        <>
+          <p className="mt-1 text-sm text-ink-2">Tap a star rating. A comment is optional.</p>
+          <LinkButton to={`/app/reviews?trip=${bookingId}`} full className="mt-4">
+            Rate your trip
+          </LinkButton>
+        </>
+      )}
     </Card>
   )
 }

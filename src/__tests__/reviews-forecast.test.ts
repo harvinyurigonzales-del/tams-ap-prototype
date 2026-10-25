@@ -2,13 +2,16 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { EMPTY_FILTER, filterTours } from '../domain/explore'
 import { forecastSales } from '../domain/forecast'
 import { needsReply, ratingFor, reviewEligibility } from '../domain/reviews'
-import { adminSeed, customerSeed } from '../seed/derive'
+import { adminFixture as adminSeed, customerFixture as customerSeed, loadFixture } from './fixtures'
 import { useAdmin } from '../state/adminStore'
 import { DEMO_CUSTOMER, NEW_CUSTOMER, useCustomer } from '../state/customerStore'
 import { resetAll } from '../state/demo'
 
 describe('public reviews', () => {
-  beforeEach(() => resetAll())
+  beforeEach(() => {
+    resetAll()
+    loadFixture(customerSeed())
+  })
   const d = customerSeed()
 
   it('seeded reviews are all 4 stars or higher, each tied to a tour', () => {

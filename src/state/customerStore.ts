@@ -9,25 +9,19 @@ import {
 } from '../domain/requests'
 import { assignableTargets, canConfirm, departureAvailability, driverConflict, money, payableOptions, shortRange, tourTotal, vehicleConflict } from '../domain/rules'
 import { publicName, reviewableTrips, validateReview } from '../domain/reviews'
-import { customerSeed } from '../seed/derive'
 import { INTERESTS } from '../seed/types'
 import type {
   AppNotification, Booking, CustomRequest, Customer, Dataset, Inquiry, Interest, Payment, PaymentMethod, PaymentType, RentalRequest,
   RentalTripType, RequestStatus, Review, SavedItem, TravelPreferences, TripPace,
 } from '../seed/types'
 import { nextId } from './ids'
+import { freshState, markSignedOut, readSession, startingState, writeSession, type CustomerAccount } from './persist'
 import { budgetOf, firstInvalid, pickupLabel, requestDates, toPlannedTrip, type PlannerAnswers, type TripPlan } from '../domain/planner/engine'
 
-// Customer simulation: its own in-memory working copy of the seed. Nothing is persisted and nothing is
-// shared with the admin simulation.
+// Customer site state. The business records (`data`) are the saved records the staff portal also uses
+// (see persist.ts and sync.ts), so staff see what customers do and customers see staff updates.
 
-export interface Account {
-  email: string
-  /** Empty for accounts created through Google sign-in. */
-  password: string
-  customerId: string
-  googleSub?: string
-}
+export type Account = CustomerAccount
 
 export const DEMO_CUSTOMER = { email: 'maria.santos@example.com', password: 'Maria2026!' }
 /** Second demo account: a new customer with no trips, preferences or saved items. */
@@ -101,9 +95,10 @@ export const EMPTY_PREFS: TravelPreferences = { interests: [], budgetMax: 0, dur
 
 export interface NewReview {
   bookingId: string
+  /** The only required field: 1 to 5 stars. */
   rating: number
-  title: string
-  text: string
+  title?: string
+  text?: string
   suggestion?: string
   party?: Review['party']
 }
@@ -181,17 +176,24 @@ const sessionState = () => ({
   checklist: {} as Record<string, string[]>,
 })
 
-const initial = () => ({
-  data: customerSeed(),
-  accounts: [
-    { ...DEMO_CUSTOMER, customerId: 'CUS-0001' },
-    { ...NEW_CUSTOMER, customerId: 'CUS-0011' },
-  ],
-  customerId: null as string | null,
+const SEED_ACCOUNTS: Account[] = [
+  { ...DEMO_CUSTOMER, customerId: 'CUS-0001' },
+  { ...NEW_CUSTOMER, customerId: 'CUS-0011' },
+]
+
+const initial = (fresh = false) => {
+  const s = fresh ? freshState() : startingState()
+  const accounts = s.customerAccounts ?? structuredClone(SEED_ACCOUNTS)
+  const id = fresh ? null : readSession().customerId
+  return {
+    data: s.data,
+    accounts,
+    customerId: id && accounts.some((a) => a.customerId === id) ? id : null,
   pendingSave: null as SavedItem | null,
-  drafts: {} as { custom?: CustomForm; rental?: RentalForm },
-  ...sessionState(),
-})
+    drafts: {} as { custom?: CustomForm; rental?: RentalForm },
+    ...sessionState(),
+  }
+}
 
 const ok = <T,>(value: T) => ({ ok: true as const, value })
 const fail = (error: string) => ({ ok: false as const, error })
@@ -234,6 +236,13 @@ function notify(d: Dataset, customerId: string, n: Omit<AppNotification, 'id' | 
   d.notifications.unshift({ id: nextId(d, 'notification'), read: false, customerId, origin: 'local', ...n })
 }
 
+/** Alerts staff in the admin portal about something a customer did. */
+function alertStaff(d: Dataset, customerId: string, n: Omit<AppNotification, 'id' | 'read' | 'customerId' | 'about' | 'origin'>) {
+  d.notifications.unshift({ id: nextId(d, 'notification'), read: false, about: customerId, origin: 'local', ...n })
+}
+
+const nameOf = (d: Dataset, customerId: string) => d.customers.find((c) => c.id === customerId)?.name ?? customerId
+
 const sameItem = (a: SavedItem, b: SavedItem) => a.kind === b.kind && a.id === b.id
 
 function applySave(d: Dataset, customerId: string, item: SavedItem) {
@@ -255,6 +264,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     }
     // Guest views and the guest's chat carry over so "Continue planning" still makes sense right after logging in.
     set({ data, customerId, pendingSave: null, ...sessionState(), viewed: s.customerId ? [] : s.viewed, chat: s.customerId ? [] : s.chat })
+    writeSession({ customerId })
   },
 
   login: (email, password) => {
@@ -264,7 +274,11 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     return { ok: true, value: undefined }
   },
 
-  logout: () => set({ customerId: null, drafts: {}, pendingSave: null, ...sessionState() }),
+  logout: () => {
+    markSignedOut()
+    set({ customerId: null, drafts: {}, pendingSave: null, ...sessionState() })
+    writeSession({ customerId: null })
+  },
 
   signup: ({ name, email, mobile, password }) => {
     const s = get()
@@ -331,6 +345,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
       id: nextId(data, 'notification'), at: createdAt, category: 'Bookings', title: 'Booking received',
       body: `${booking.id} · ${service.name}. Send your payment to keep your seats.`, link: `/app/trips/${booking.id}`, read: false, customerId: s.customerId, origin: 'local',
     })
+    alertStaff(data, s.customerId, { at: createdAt, category: 'Bookings', title: 'New booking request', body: `${booking.id} (${nameOf(data, s.customerId)}) · ${service.name}, ${shortRange(booking.startDate, booking.endDate)}, ${booking.pax} pax.`, link: `/admin/bookings?id=${booking.id}` })
     set({ data })
     return { ok: true, value: booking }
   },
@@ -352,6 +367,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
       id: nextId(data, 'notification'), at, category: 'Payments', title: 'Payment submitted',
       body: `${peso(payment.amount)} via ${payment.method} for ${b.id}. We’ll confirm once it’s verified.`, link: `/app/trips/${b.id}`, read: false, customerId: s.customerId!, origin: 'local',
     })
+    alertStaff(data, b.customerId, { at, category: 'Payments', title: 'Payment needs verification', body: `${b.id} (${nameOf(data, b.customerId)}) submitted ${peso(payment.amount)} via ${payment.method}.`, link: `/admin/bookings?id=${b.id}` })
     set({ data })
     return { ok: true, value: payment }
   },
@@ -362,13 +378,16 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     const b = data.bookings.find((x) => x.id === bookingId && x.customerId === s.customerId)
     if (!b || (b.status !== 'Pending' && b.status !== 'Confirmed')) return { ok: false, error: 'This booking can no longer be cancelled.' }
     b.cancellationRequested = true
-    notify(data, b.customerId, { at: demoNowStamp(), category: 'Bookings', title: 'Cancellation requested', body: `${b.id}: staff will review your request and contact you about any refund.`, link: `/app/trips/${b.id}` })
+    const at = demoNowStamp()
+    notify(data, b.customerId, { at, category: 'Bookings', title: 'Cancellation requested', body: `${b.id}: staff will review your request and contact you about any refund.`, link: `/app/trips/${b.id}` })
+    alertStaff(data, b.customerId, { at, category: 'Bookings', title: 'Cancellation requested', body: `${b.id} (${nameOf(data, b.customerId)}) asked to cancel.`, link: `/admin/bookings?id=${b.id}` })
     set({ data })
     return { ok: true, value: undefined }
   },
 
   markAllRead: () => {
     const s = get()
+    if (!s.customerId || !s.data.notifications.some((n) => n.customerId === s.customerId && !n.read)) return
     const data = structuredClone(s.data)
     data.notifications.forEach((n) => {
       if (n.customerId === s.customerId) n.read = true
@@ -377,9 +396,11 @@ export const useCustomer = create<CustomerState>((set, get) => ({
   },
 
   markRead: (id) => {
-    const data = structuredClone(get().data)
-    const n = data.notifications.find((x) => x.id === id)
-    if (n) n.read = true
+    const s = get()
+    const target = s.data.notifications.find((x) => x.id === id && x.customerId === s.customerId)
+    if (!target || target.read) return
+    const data = structuredClone(s.data)
+    data.notifications.find((x) => x.id === id)!.read = true
     set({ data })
   },
 
@@ -437,6 +458,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     }
     data.customRequests.push(r)
     notify(data, s.customerId, { at, category: 'Requests', title: 'Custom trip request sent', body: `${r.id} · ${dest.name}. We’ll let you know when your proposal is ready.`, link: `/app/custom/${r.id}` })
+    alertStaff(data, s.customerId, { at, category: 'Requests', title: 'New custom trip request', body: `${r.id} (${nameOf(data, s.customerId)}) · ${dest.name}, ${r.groupSize} pax.`, link: `/admin/requests?id=${r.id}` })
     set({ data, drafts: { ...s.drafts, custom: undefined } })
     return ok(r)
   },
@@ -467,6 +489,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     }
     data.customRequests.push(r)
     notify(data, s.customerId, { at, category: 'Requests', title: 'Trip request sent', body: `${r.id} · ${dest.name}. TAMS-AP will review your plan and prepare a proposal.`, link: `/app/custom/${r.id}` })
+    alertStaff(data, s.customerId, { at, category: 'Requests', title: 'New trip plan request', body: `${r.id} (${nameOf(data, s.customerId)}) · ${dest.name}, ${r.groupSize} pax, from the Trip Planner.`, link: `/admin/requests?id=${r.id}` })
     set({ data })
     return ok(r)
   },
@@ -491,6 +514,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     }
     data.rentalRequests.push(r)
     notify(data, s.customerId, { at, category: 'Requests', title: 'Van rental request sent', body: `${r.id} · ${cat.name} to ${r.dropoff}. A request does not reserve a van yet.`, link: `/app/rentals/${r.id}` })
+    alertStaff(data, s.customerId, { at, category: 'Requests', title: 'New van rental request', body: `${r.id} (${nameOf(data, s.customerId)}) · ${cat.name} to ${r.dropoff}.`, link: `/admin/requests?id=${r.id}` })
     set({ data, drafts: { ...s.drafts, rental: undefined } })
     return ok(r)
   },
@@ -520,6 +544,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     r.bookingId = booking.id
     r.events.push({ at, status: 'Accepted', note: `Proposal accepted. Booking ${booking.id} created; pay the down payment to continue.` })
     notify(data, r.customerId, { at, category: 'Bookings', title: 'Proposal accepted', body: `${booking.id} · ${p.title}. Pay the down payment so staff can confirm it.`, link: `/app/trips/${booking.id}` })
+    alertStaff(data, r.customerId, { at, category: 'Requests', title: 'Proposal accepted', body: `${r.id} (${nameOf(data, r.customerId)}) became booking ${booking.id}.`, link: `/admin/bookings?id=${booking.id}` })
     set({ data })
     return ok(booking)
   },
@@ -548,6 +573,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     r.bookingId = booking.id
     r.events.push({ at, status: 'Accepted', note: `Quote accepted. Booking ${booking.id} created; pay the down payment to continue.` })
     notify(data, r.customerId, { at, category: 'Bookings', title: 'Quote accepted', body: `${booking.id} · ${booking.label}. Pay the down payment so staff can confirm it.`, link: `/app/trips/${booking.id}` })
+    alertStaff(data, r.customerId, { at, category: 'Requests', title: 'Quote accepted', body: `${r.id} (${nameOf(data, r.customerId)}) became booking ${booking.id}.`, link: `/admin/bookings?id=${booking.id}` })
     set({ data })
     return ok(booking)
   },
@@ -563,6 +589,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     r.status = 'Under review'
     r.events.push({ at, status: 'Under review', note: `You asked for changes: “${text.trim()}”` })
     notify(data, r.customerId, { at, category: 'Requests', title: 'Changes requested', body: `${r.id}: staff will revise the ${kind === 'custom' ? 'proposal' : 'quote'} and send it again.`, link: kind === 'custom' ? `/app/custom/${r.id}` : `/app/rentals/${r.id}` })
+    alertStaff(data, r.customerId, { at, category: 'Requests', title: 'Customer asked for changes', body: `${r.id} (${nameOf(data, r.customerId)}): “${text.trim()}”`, link: `/admin/requests?id=${r.id}` })
     set({ data })
     return ok(undefined)
   },
@@ -574,8 +601,10 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     const r = list.find((x) => x.id === requestId && x.customerId === s.customerId)
     if (!r || !canTransition(r.status, 'Closed')) return fail('This request can no longer be withdrawn.')
     r.status = 'Closed'
-    r.events.push({ at: demoNowStamp(), status: 'Closed', note: 'Withdrawn by you.' })
-    notify(data, r.customerId, { at: demoNowStamp(), category: 'Requests', title: 'Request withdrawn', body: `${r.id} is closed. You can send a new request any time.`, link: kind === 'custom' ? `/app/custom/${r.id}` : `/app/rentals/${r.id}` })
+    const at = demoNowStamp()
+    r.events.push({ at, status: 'Closed', note: 'Withdrawn by you.' })
+    alertStaff(data, r.customerId, { at, category: 'Requests', title: 'Request withdrawn', body: `${r.id} (${nameOf(data, r.customerId)}) withdrew the request.`, link: `/admin/requests?id=${r.id}` })
+    notify(data, r.customerId, { at, category: 'Requests', title: 'Request withdrawn', body: `${r.id} is closed. You can send a new request any time.`, link: kind === 'custom' ? `/app/custom/${r.id}` : `/app/rentals/${r.id}` })
     set({ data })
     return ok(undefined)
   },
@@ -678,7 +707,8 @@ export const useCustomer = create<CustomerState>((set, get) => ({
         break
       case 'complete':
         b.status = 'Completed'
-        notify(data, b.customerId, { at, category: 'Bookings', title: 'Trip completed', body: `Thanks for travelling with us on ${title}!${b.rental || b.serviceId === 'SVC-CUSTOM' ? '' : ' Rate your trip to help other travellers.'}`, link: b.rental || b.serviceId === 'SVC-CUSTOM' ? link : '/app/reviews' })
+        b.completedAt = at
+        notify(data, b.customerId, { at, category: 'Bookings', title: 'Trip completed', body: `Thanks for travelling with us on ${title}! Rate your trip to help other travellers.`, link: `/app/reviews?trip=${b.id}` })
         break
     }
     set({ data })
@@ -707,6 +737,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     }
     data.inquiries.push(q)
     notify(data, s.customerId, { at, category: 'Messages', title: 'Question sent to staff', body: `${q.id} · ${q.subject}. Staff reply here and in Messages.`, link: `/app/messages/${q.id}` })
+    alertStaff(data, s.customerId, { at, category: 'Messages', title: 'New question from a customer', body: `${q.id} (${nameOf(data, s.customerId)}) · ${q.subject}`, link: `/admin/inquiries?id=${q.id}` })
     set({ data })
     return ok(q)
   },
@@ -717,8 +748,10 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     const data = structuredClone(s.data)
     const q = data.inquiries.find((x) => x.id === inquiryId && x.customerId === s.customerId)
     if (!q) return fail('Conversation not found.')
-    q.messages.push({ from: 'customer', at: demoNowStamp(), text: text.trim() })
+    const at = demoNowStamp()
+    q.messages.push({ from: 'customer', at, text: text.trim() })
     q.status = 'Awaiting staff'
+    alertStaff(data, q.customerId, { at, category: 'Messages', title: 'New message', body: `${q.id} (${nameOf(data, q.customerId)}) · ${q.subject}`, link: `/admin/inquiries?id=${q.id}` })
     set({ data })
     return ok(undefined)
   },
@@ -757,7 +790,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     // Only travellers with a completed TAMS AP trip can rate it, once per trip.
     if (!trip) return fail('You can rate a trip after you complete it with TAMS AP.')
     const errors = validateReview(input)
-    const first = errors.rating ?? errors.title ?? errors.text
+    const first = errors.rating ?? errors.title ?? errors.text ?? errors.suggestion
     if (first) return fail(first)
     const data = structuredClone(s.data)
     const me = data.customers.find((c) => c.id === s.customerId)!
@@ -769,8 +802,8 @@ export const useCustomer = create<CustomerState>((set, get) => ({
       name: publicName(me.name),
       city: me.city.split(',')[0],
       rating: Math.round(input.rating) as Review['rating'],
-      title: input.title.trim(),
-      text: input.text.trim(),
+      title: (input.title ?? '').trim(),
+      text: (input.text ?? '').trim(),
       suggestion: input.suggestion?.trim() || undefined,
       party: input.party,
       travelDate: trip.startDate,
@@ -778,7 +811,9 @@ export const useCustomer = create<CustomerState>((set, get) => ({
       origin: 'local',
     }
     data.reviews.unshift(review)
-    notify(data, me.id, { at: review.createdAt, category: 'Bookings', title: 'Review posted', body: `Thanks for rating your trip. Your review is now on the tour page.`, link: `/app/tours/${trip.serviceId}` })
+    const tour = data.services.find((x) => x.id === trip.serviceId)?.type === 'tour'
+    notify(data, me.id, { at: review.createdAt, category: 'Bookings', title: 'Review posted', body: tour ? 'Thanks for rating your trip. Your review is now on the tour page.' : 'Thanks for rating your trip.', link: tour ? `/app/tours/${trip.serviceId}` : '/app/reviews' })
+    alertStaff(data, me.id, { at: review.createdAt, category: 'Bookings', title: 'New review', body: `${review.rating}★ from ${review.name} for ${trip.label ?? data.services.find((x) => x.id === trip.serviceId)?.name} (${trip.id}).`, link: '/admin/reviews' })
     set({ data })
     return ok(review)
   },
@@ -789,7 +824,10 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     set({ checklist: { ...cl, [bookingId]: cur.includes(itemId) ? cur.filter((x) => x !== itemId) : [...cur, itemId] } })
   },
 
-  reset: () => set(initial()),
+  reset: () => {
+    writeSession({ customerId: null })
+    set(initial(true))
+  },
 }))
 
 function ownsRecord(d: Dataset, customerId: string, ref: string) {

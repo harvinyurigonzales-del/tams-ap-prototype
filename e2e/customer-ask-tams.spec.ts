@@ -1,7 +1,7 @@
 import { expect, test, type Page } from './fixtures'
 
 // Ask TAMS reliability: follow-up suggestions after every answer, multi-turn context, no duplicate sends,
-// retry after an error, and a conversation that survives closing, reopening and changing page.
+// retry after an error, and a fresh conversation every time the chat is closed.
 
 const panel = (page: Page) => page.getByRole('dialog', { name: 'Ask TAMS assistant' })
 const chips = (page: Page) => panel(page).getByRole('group', { name: 'Suggested questions' }).getByRole('button')
@@ -58,7 +58,7 @@ test('five exchanges, typed and suggested, each followed by fresh suggestions', 
   await expect(bubbles(page)).toHaveCount(6)
 })
 
-test('no duplicate or empty sends, and the chat survives closing and navigation', async ({ page }) => {
+test('no duplicate or empty sends, follow-ups while open, and a fresh chat after closing', async ({ page }) => {
   await page.goto('/app')
   await page.getByRole('button', { name: 'Ask TAMS', exact: true }).click()
   const input = panel(page).getByLabel('Your question')
@@ -70,22 +70,42 @@ test('no duplicate or empty sends, and the chat survives closing and navigation'
   // Rapid clicks on a suggestion send it once.
   const first = chips(page).first()
   await first.click()
-  await first.click({ force: true }).catch(() => {})
-  await chips(page).nth(1).click({ force: true }).catch(() => {})
+  await first.click({ force: true, timeout: 500 }).catch(() => {})
   await waitAnswer(page, 1)
   await expect(bubbles(page)).toHaveCount(1)
+  // A follow-up keeps the conversation while it is open.
+  await input.fill('How much is a van rental?')
+  await input.press('Enter')
+  await waitAnswer(page, 2)
+  await expect(bubbles(page)).toHaveCount(2)
 
+  // Closing clears it; reopening starts with a greeting and fresh suggestions.
+  await page.getByRole('button', { name: 'Close assistant' }).click()
+  await page.getByRole('button', { name: 'Ask TAMS', exact: true }).click()
+  await expect(bubbles(page)).toHaveCount(0)
+  await expect(answers(page)).toHaveCount(0)
+  await expect(panel(page).getByText(/^Hi! Ask me about/)).toBeVisible()
+  await expect(input).toHaveValue('')
+  expect(await chips(page).count()).toBeGreaterThanOrEqual(3)
+
+  // Closing while a reply is on its way drops the late reply.
+  await input.fill('How much is the Baguio tour?')
+  await input.press('Enter')
+  await page.getByRole('button', { name: 'Close assistant' }).click()
+  await page.waitForTimeout(1200)
+  await page.getByRole('button', { name: 'Ask TAMS', exact: true }).click()
+  await expect(bubbles(page)).toHaveCount(0)
+  await expect(answers(page)).toHaveCount(0)
+  await expect(panel(page).getByLabel('Ask TAMS is typing')).toHaveCount(0)
+
+  // Changing page from the bottom bar on a phone also starts fresh.
+  await input.fill('How much is a van rental?')
+  await input.press('Enter')
+  await waitAnswer(page, 1)
   await page.getByRole('button', { name: 'Close assistant' }).click()
   await page.getByRole('navigation', { name: 'Main' }).last().getByRole('link', { name: 'Explore' }).click()
   await page.getByRole('button', { name: 'Ask TAMS', exact: true }).click()
-  await expect(bubbles(page)).toHaveCount(1)
-  await expect(answers(page)).toHaveCount(1)
-  expect(await chips(page).count()).toBeGreaterThanOrEqual(3)
-
-  // New conversation clears it.
-  await panel(page).getByRole('button', { name: 'New conversation' }).click()
   await expect(bubbles(page)).toHaveCount(0)
-  await expect(chips(page).first()).toBeVisible()
 })
 
 test('a failed answer keeps the question and can be retried', async ({ page }) => {

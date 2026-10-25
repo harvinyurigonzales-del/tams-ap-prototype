@@ -24,7 +24,7 @@ const REJECT_REASONS = [
 
 /** Booking Details side panel (left-variant design): verify, reject, confirm, cancel, assign. */
 export function BookingPanel({ bookingId, onClose }: { bookingId: string; onClose: () => void }) {
-  const { data, verifyPayment, rejectPayment, confirmBooking, cancelBooking } = useAdmin()
+  const { data, verifyPayment, rejectPayment, confirmBooking, cancelBooking, declineCancellation, completeBooking, sendReminder } = useAdmin()
   const toast = useUi((s) => s.toast)
   const [verify, setVerify] = useState<Payment | null>(null)
   const [reject, setReject] = useState<Payment | null>(null)
@@ -32,6 +32,7 @@ export function BookingPanel({ bookingId, onClose }: { bookingId: string; onClos
   const [confirm, setConfirm] = useState(false)
   const [cancel, setCancel] = useState(false)
   const [assign, setAssign] = useState(false)
+  const [complete, setComplete] = useState(false)
   const [reason, setReason] = useState(REJECT_REASONS[0])
   const [other, setOther] = useState('')
   const [cancelReason, setCancelReason] = useState('')
@@ -180,6 +181,54 @@ export function BookingPanel({ bookingId, onClose }: { bookingId: string; onClos
         </div>
 
         <div className="space-y-2 border-t border-line px-5 py-4">
+          {b.cancellationRequested && (b.status === 'Pending' || b.status === 'Confirmed') && (
+            <div className="rounded-xl bg-warn-bg p-3">
+              <p className="text-sm font-semibold text-ink">The customer asked to cancel.</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <Button
+                  size="sm"
+                  variant="danger"
+                  disabled={!canc.ok}
+                  onClick={() => {
+                    setCancelReason('Cancelled at the customer’s request')
+                    setCancel(true)
+                  }}
+                >
+                  Approve
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    const r = declineCancellation(b.id)
+                    toast(r.ok ? 'Cancellation declined. The customer was notified.' : r.error, r.ok ? 'info' : 'error')
+                  }}
+                >
+                  Decline
+                </Button>
+              </div>
+            </div>
+          )}
+          {b.status === 'Confirmed' && (
+            <div>
+              <Button full disabled={m.balance > 0 || !!b.cancellationRequested} onClick={() => setComplete(true)} aria-describedby="complete-hint">
+                Mark trip completed
+              </Button>
+              {m.balance > 0 && <DisabledHint id="complete-hint">The balance of {peso(m.balance)} must be verified first.</DisabledHint>}
+            </div>
+          )}
+          {b.status === 'Confirmed' && (
+            <Button
+              full
+              variant="ghost"
+              onClick={() => {
+                const r = sendReminder(b.id)
+                toast(r.ok ? 'Trip reminder sent to the customer.' : r.error, r.ok ? 'success' : 'error')
+              }}
+            >
+              Send trip reminder
+            </Button>
+          )}
           {b.status === 'Pending' && (
             <div>
               <Button full disabled={!conf.ok} onClick={() => setConfirm(true)} aria-describedby="confirm-hint">
@@ -304,6 +353,19 @@ export function BookingPanel({ bookingId, onClose }: { bookingId: string; onClos
       >
         <TextArea label="Reason" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} maxLength={200} placeholder="e.g. Customer request: schedule conflict" />
       </ConfirmDialog>
+
+      <ConfirmDialog
+        open={complete}
+        onClose={() => setComplete(false)}
+        title="Mark this trip completed?"
+        body={`${b.id}, ${b.label ?? s.name}, ${shortRange(b.startDate, b.endDate)}. ${c?.name ?? 'The customer'} is notified and can rate the trip.`}
+        confirmLabel="Mark completed"
+        onConfirm={() => {
+          const r = completeBooking(b.id)
+          if (!r.ok) return r.error
+          toast(`${b.id} marked completed.`)
+        }}
+      />
 
       {assign && target && <AssignDialog target={target} onClose={() => setAssign(false)} />}
     </>

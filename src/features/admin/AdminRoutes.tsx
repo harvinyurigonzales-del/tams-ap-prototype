@@ -1,18 +1,19 @@
-import { Bell, Bot, CalendarDays, CarFront, ClipboardList, CreditCard, Inbox, LayoutDashboard, Lock, LogOut, Map as MapIcon, Menu, MessageSquare, PieChart, Settings as SettingsIcon, ShieldCheck, Star, UserRound, Users, Wrench, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Bell, Bot, CalendarDays, ChevronDown, CarFront, ClipboardList, CreditCard, Inbox, LayoutDashboard, Lock, LogOut, Map as MapIcon, Menu, MessageSquare, PieChart, Settings as SettingsIcon, ShieldCheck, Star, UserRound, Users, Wrench, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { NotFound } from '../../app/NotFound'
 import { DEMO_TODAY } from '../../lib/demoClock'
 import { fmtDate } from '../../lib/format'
 import { needsReply } from '../../domain/reviews'
-import { useAdmin, useIsAdmin, useMe } from '../../state/adminStore'
-import { usePresenter } from '../../state/presenter'
+import { staffNotifications, useAdmin, useIsAdmin, useMe } from '../../state/adminStore'
+import { NotificationBell } from '../../ui/NotificationsPanel'
 import { LinkButton } from '../../ui/Button'
 import { Card } from '../../ui/Card'
 import type { Dataset } from '../../seed/types'
 import { BrandMark } from '../../ui/BrandMark'
 import { ConfirmDialog } from '../../ui/Dialog'
-import { AdminLogin } from './AdminLogin'
+import { Login } from '../customer/Auth'
+import { useWorkspace } from '../../state/auth'
 import { Bookings } from './Bookings'
 import { Calendar } from './Calendar'
 import { Customers } from './Customers'
@@ -28,6 +29,7 @@ import { Payments } from './Payments'
 import { Reports } from './Reports'
 import { AdminRequests } from './Requests'
 import { AdminReviews } from './Reviews'
+import { justSignedOut } from '../../state/persist'
 import { Settings } from './Settings'
 
 export function AdminRoutes() {
@@ -36,8 +38,8 @@ export function AdminRoutes() {
       <Route
         path="login"
         element={
-          <div className="min-h-dvh">
-            <AdminLogin />
+          <div className="theme-tara min-h-dvh">
+            <Login />
           </div>
         }
       />
@@ -88,49 +90,56 @@ function AdminOnly({ title, children }: { title: string; children: React.ReactNo
   )
 }
 
-/** Client-side guard. Real access control belongs on the server. */
+/** Staff portal guard: customers go back to the customer site, guests log in first. Real access control belongs on a server. */
 function RequireAdmin() {
-  const loggedIn = useAdmin((s) => s.loggedIn)
+  const workspace = useWorkspace()
   const loc = useLocation()
-  if (!loggedIn) return <Navigate to={`/admin/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace state={{ guarded: true }} />
+  if (workspace === 'customer') return <Navigate to="/app" replace />
+  if (!workspace) return <Navigate to={justSignedOut() ? '/admin/login' : `/admin/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />
   return <Outlet />
 }
 
 type NavItem = { to: string; label: string; icon: typeof LayoutDashboard; end?: boolean; count?: (d: Dataset) => number; adminOnly?: boolean }
 
 // Grouped by the job staff are doing, with a count only where something is waiting on them.
-const GROUPS: { title?: string; items: NavItem[] }[] = [
+const GROUPS: { title: string; items: NavItem[] }[] = [
   {
+    title: 'Overview',
     items: [
       { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
-      { to: '/admin/bookings', label: 'Bookings', icon: ClipboardList },
-      { to: '/admin/payments', label: 'Payments', icon: CreditCard, count: (d) => d.payments.filter((p) => p.status === 'Submitted').length },
-      { to: '/admin/calendar', label: 'Calendar', icon: CalendarDays },
+      { to: '/admin/notifications', label: 'Notifications', icon: Bell, count: (d) => staffNotifications(d).filter((n) => !n.read).length },
     ],
   },
   {
-    title: 'Customers',
+    title: 'Bookings and requests',
     items: [
-      { to: '/admin/customers', label: 'Customers', icon: Users },
+      { to: '/admin/bookings', label: 'Bookings', icon: ClipboardList },
+      { to: '/admin/calendar', label: 'Calendar', icon: CalendarDays },
       { to: '/admin/requests', label: 'Requests', icon: Inbox, count: (d) => [...d.customRequests, ...d.rentalRequests].filter((r) => r.status === 'Submitted').length },
+      { to: '/admin/customers', label: 'Customers', icon: Users },
       { to: '/admin/inquiries', label: 'Inquiries', icon: MessageSquare, count: (d) => d.inquiries.filter((i) => i.status === 'Awaiting staff').length },
       { to: '/admin/reviews', label: 'Reviews', icon: Star, count: (d) => d.reviews.filter(needsReply).length },
     ],
   },
   {
-    title: 'Business',
+    title: 'Fleet and operations',
     items: [
-      { to: '/admin/reports', label: 'Reports', icon: PieChart, adminOnly: true },
-      { to: '/admin/packages', label: 'Tour packages', icon: MapIcon, adminOnly: true },
       { to: '/admin/vehicles', label: 'Vehicles', icon: CarFront },
       { to: '/admin/drivers', label: 'Drivers', icon: UserRound },
       { to: '/admin/maintenance', label: 'Maintenance', icon: Wrench },
+      { to: '/admin/packages', label: 'Tour packages', icon: MapIcon, adminOnly: true },
     ],
   },
   {
-    title: 'System',
+    title: 'Finance and reports',
     items: [
-      { to: '/admin/notifications', label: 'Notifications', icon: Bell, count: (d) => d.notifications.filter((n) => !n.read).length },
+      { to: '/admin/payments', label: 'Payments', icon: CreditCard, count: (d) => d.payments.filter((p) => p.status === 'Submitted').length },
+      { to: '/admin/reports', label: 'Reports', icon: PieChart, adminOnly: true },
+    ],
+  },
+  {
+    title: 'Administration',
+    items: [
       { to: '/admin/staff', label: 'Staff accounts', icon: ShieldCheck, adminOnly: true },
       { to: '/admin/chatbot', label: 'Manage chatbot', icon: Bot, adminOnly: true },
       { to: '/admin/settings', label: 'Settings', icon: SettingsIcon },
@@ -138,29 +147,37 @@ const GROUPS: { title?: string; items: NavItem[] }[] = [
   },
 ]
 
+const isActive = (n: NavItem, pathname: string) => (n.end ? pathname === n.to || pathname === `${n.to}/` : pathname.startsWith(n.to))
+
 function Shell() {
   const [drawer, setDrawer] = useState(false)
   const [out, setOut] = useState(false)
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const { data, logout, maintenance } = useAdmin()
+  const { data, logout, maintenance, markRead, markAllRead } = useAdmin()
   const me = useMe()
   const admin = me?.role === 'Admin'
-  const presenter = usePresenter()
-  const unread = data.notifications.filter((n) => !n.read).length
+  const notes = useMemo(() => staffNotifications(data).sort((a, b) => b.at.localeCompare(a.at)), [data])
+  const groups = GROUPS.map((g) => ({ ...g, items: g.items.filter((n) => admin || !n.adminOnly) })).filter((g) => g.items.length)
+  const activeGroup = groups.find((g) => g.items.some((n) => isActive(n, pathname)))?.title
+  // Groups the person opened or closed by hand; the group of the page being shown is always open.
+  const [toggled, setToggled] = useState<Record<string, boolean>>({})
+  const isOpen = (title: string) => title === activeGroup || (toggled[title] ?? false)
   useEffect(() => {
     setDrawer(false)
   }, [pathname])
 
+  const countOf = (n: NavItem) => (n.to === '/admin/maintenance' ? overdueCount(maintenance) : (n.count?.(data) ?? 0))
+
   const link = (n: NavItem) => {
-    const count = n.to === '/admin/maintenance' ? overdueCount(maintenance) : (n.count?.(data) ?? 0)
+    const count = countOf(n)
     return (
       <NavLink
         key={n.to}
         to={n.to}
         end={n.end}
         className={({ isActive }) =>
-          `group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${isActive ? 'bg-white/12 text-white' : 'text-white/75 hover:bg-white/6 hover:text-white'}`
+          `group relative flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${isActive ? 'bg-white/12 text-white' : 'text-white/75 hover:bg-white/6 hover:text-white'}`
         }
       >
         {({ isActive }) => (
@@ -181,30 +198,51 @@ function Shell() {
   }
 
   const sidebar = (
-    <div className="flex h-full flex-col p-4">
-      <div className="mb-6 flex items-center justify-between px-1 pt-1">
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 items-center justify-between px-5 pt-5 pb-4">
         <Link to="/admin" aria-label="Dashboard">
           <BrandMark inverse className="h-10" />
         </Link>
-        <button className="rounded-lg p-1 text-white/80 lg:hidden" onClick={() => setDrawer(false)} aria-label="Close menu">
+        <button className="grid size-10 place-items-center rounded-lg text-white/80 hover:bg-white/10 lg:hidden" onClick={() => setDrawer(false)} aria-label="Close menu">
           <X className="size-5" />
         </button>
       </div>
-      <nav aria-label="Admin" className="flex flex-col">
-        {GROUPS.map((g, i) => (
-          <div key={i} className={i ? 'mt-5' : ''}>
-            {g.title && <p className="mb-1 px-3 text-[11px] font-semibold tracking-[0.12em] text-white/50 uppercase">{g.title}</p>}
-            <div className="flex flex-col gap-0.5">{g.items.filter((n) => admin || !n.adminOnly).map(link)}</div>
-          </div>
-        ))}
+      {/* Scrolls when the window is short; the scrollbar itself is hidden. */}
+      <nav aria-label="Admin" className="no-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3">
+        {groups.map((g) => {
+          const open = isOpen(g.title)
+          const waiting = g.items.reduce((n, i) => n + countOf(i), 0)
+          const id = `nav-${g.title.replace(/\W+/g, '-').toLowerCase()}`
+          return (
+            <div key={g.title} className="mt-1 first:mt-0">
+              <button
+                type="button"
+                onClick={() => setToggled((t) => ({ ...t, [g.title]: !open }))}
+                aria-expanded={open}
+                aria-controls={id}
+                disabled={g.title === activeGroup}
+                className="flex min-h-9 w-full items-center gap-2 rounded-lg px-3 text-left text-[11px] font-semibold tracking-[0.06em] whitespace-nowrap text-white/55 uppercase hover:text-white/85 disabled:cursor-default disabled:hover:text-white/55"
+              >
+                <span className="min-w-0 flex-1 truncate">{g.title}</span>
+                {!open && waiting > 0 && (
+                  <span className="rounded-full bg-sili px-1.5 text-[10px] font-bold tracking-normal text-white tnum">
+                    {waiting}
+                    <span className="sr-only"> waiting</span>
+                  </span>
+                )}
+                <ChevronDown className={`size-3.5 transition-transform ${open ? 'rotate-180' : ''} ${g.title === activeGroup ? 'opacity-0' : ''}`} aria-hidden />
+              </button>
+              {open && (
+                <div id={id} className="flex flex-col gap-0.5 pb-1">
+                  {g.items.map(link)}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </nav>
-      <div className="mt-auto space-y-0.5 border-t border-white/10 pt-4">
-        {presenter && (
-          <Link to="/" className="block rounded-lg px-3 py-2 text-xs font-medium text-white/65 hover:bg-white/6 hover:text-white">
-            ← Presenter start page
-          </Link>
-        )}
-        <button onClick={() => setOut(true)} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-white/75 hover:bg-white/6 hover:text-white">
+      <div className="shrink-0 border-t border-white/10 p-3">
+        <button onClick={() => setOut(true)} className="flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-white/75 hover:bg-white/6 hover:text-white">
           <LogOut className="size-[18px]" aria-hidden /> Log out
         </button>
       </div>
@@ -214,27 +252,22 @@ function Shell() {
   return (
     <div className="min-h-dvh">
       <div className="lg:grid lg:grid-cols-[248px_1fr]">
-        <aside className="sticky top-0 hidden h-dvh overflow-y-auto bg-navy lg:block">{sidebar}</aside>
+        <aside className="sticky top-0 hidden h-dvh bg-navy lg:block">{sidebar}</aside>
         {drawer && (
-          <div className="fixed inset-0 z-40 lg:hidden">
+          <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
             <button className="absolute inset-0 bg-brand-900/40" aria-label="Close menu" onClick={() => setDrawer(false)} />
-            <aside className="absolute inset-y-0 left-0 w-72 overflow-y-auto bg-navy shadow-pop">{sidebar}</aside>
+            <aside className="absolute inset-y-0 left-0 w-[min(18rem,85vw)] bg-navy shadow-pop">{sidebar}</aside>
           </div>
         )}
         <div className="min-w-0">
           <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-surface/95 px-4 backdrop-blur sm:px-6">
-            <button className="rounded-lg p-2 text-ink-2 lg:hidden" onClick={() => setDrawer(true)} aria-label="Open menu">
+            <button className="grid size-10 place-items-center rounded-lg text-ink-2 hover:bg-brand-50 lg:hidden" onClick={() => setDrawer(true)} aria-label="Open menu">
               <Menu className="size-5" />
             </button>
             <BrandMark compact className="h-8 lg:hidden" />
-            <p className="hidden text-sm text-ink-2 sm:block">
-              As of <span className="font-semibold text-ink">{fmtDate(DEMO_TODAY, { weekday: true })}, 9:30 AM</span>
-            </p>
+            <p className="hidden text-sm text-ink-2 sm:block">{fmtDate(DEMO_TODAY, { weekday: true, year: true })}</p>
             <div className="ml-auto flex items-center gap-2">
-              <Link to="/admin/notifications" className="relative rounded-lg p-2 text-ink-2 hover:bg-brand-50" aria-label={`Notifications, ${unread} unread`}>
-                <Bell className="size-5" />
-                {unread > 0 && <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-sili ring-2 ring-surface" />}
-              </Link>
+              <NotificationBell items={notes} onRead={markRead} onReadAll={markAllRead} viewAllTo="/admin/notifications" />
               <span className="mx-1 h-6 w-px bg-line" aria-hidden />
               <Link to="/admin/settings?tab=account" className="flex items-center gap-2 rounded-xl p-1 pr-2 hover:bg-brand-50" aria-label={`Account settings, ${me?.name ?? ''} (${me?.role ?? ''})`}>
                 <span className="grid size-9 place-items-center rounded-full bg-navy font-display text-sm font-bold text-white" aria-hidden>
@@ -261,8 +294,8 @@ function Shell() {
         body="You can log back in with your work email and password."
         confirmLabel="Log out"
         onConfirm={() => {
-          logout()
           navigate('/admin/login', { replace: true })
+          logout()
         }}
       />
     </div>

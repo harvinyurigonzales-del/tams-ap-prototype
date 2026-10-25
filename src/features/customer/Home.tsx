@@ -1,4 +1,4 @@
-import { ArrowUpRight, CalendarDays, ChevronLeft, ChevronRight, CircleDollarSign, MapPin, MessageCircle, Search, SlidersHorizontal, Sparkles, Ticket, Users, X } from 'lucide-react'
+import { ArrowUpRight, CalendarDays, ChevronRight, CircleDollarSign, MapPin, MessageCircle, Search, SlidersHorizontal, Sparkles, Ticket, Users, X } from 'lucide-react'
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { availableMoods, departureInWindow } from '../../domain/moods'
@@ -16,20 +16,14 @@ import { Picture, srcSetOf } from '../../ui/Picture'
 import { DestinationCard, destinationOf, pickupPlace, PriceTag, SaveButton, TourCard } from './Cards'
 import { TRIP_DESK } from './Trips'
 
-/** Hero slideshow: a broad tour of the catalog, north to south. Swap entries when the agency has its own photos. */
-const HERO_SLIDES = [
-  { destinationId: 'DST-BANAUE', caption: 'Rice terraces of Banaue, Ifugao' },
-  { destinationId: 'DST-VIGAN', caption: 'Calle Crisologo, Vigan' },
-  { destinationId: 'DST-PAGUDPUD', caption: 'Bangui windmills, Ilocos Norte' },
-  { destinationId: 'DST-HUNDRED', caption: 'Hundred Islands, Pangasinan' },
-  { destinationId: 'DST-BAGUIO', caption: 'Baguio, the Summer Capital' },
-  { destinationId: 'DST-PINATUBO', caption: 'Mt. Pinatubo crater lake, Tarlac' },
-  { destinationId: 'DST-ZAMBALES', caption: 'Anawangin Cove, Zambales' },
-  { destinationId: 'DST-INTRAMUROS', caption: 'Intramuros, Manila' },
-  { destinationId: 'DST-TAGAYTAY', caption: 'Taal Volcano from Tagaytay' },
-  { destinationId: 'DST-BATANGAS', caption: 'Beaches of Batangas' },
-]
-const SLIDE_MS = 3000
+/**
+ * Hero background photos: a broad tour of the catalog, north to south. They are decorative, so they carry no
+ * caption or credit on screen; every photo is credited on the Photo credits page (source data in seed/photoData.ts).
+ */
+const HERO_SLIDES = ['DST-BANAUE', 'DST-VIGAN', 'DST-PAGUDPUD', 'DST-HUNDRED', 'DST-BAGUIO', 'DST-PINATUBO', 'DST-ZAMBALES', 'DST-INTRAMUROS', 'DST-TAGAYTAY', 'DST-BATANGAS']
+/** Time each photo shows, and the crossfade between them. */
+const SLIDE_MS = 2000
+const FADE_MS = 700
 /** The destination given the large storytelling feature: a real photo and a scheduled joiner tour. */
 const SPOTLIGHT_DESTINATION = 'DST-BAGUIO'
 
@@ -100,29 +94,23 @@ export function Home() {
 
 function Hero({ greeting }: { greeting?: string }) {
   const data = useCustomer((s) => s.data)
-  const slides = HERO_SLIDES.map((h) => ({ ...h, dest: data.destinations.find((x) => x.id === h.destinationId)! })).filter((h) => h.dest)
+  const slides = HERO_SLIDES.map((id) => data.destinations.find((x) => x.id === id)!).filter(Boolean)
   const reduced = usePrefersReducedMotion()
   const [index, setIndex] = useState(0)
-  // Cycles on its own unless reduced motion is on; pauses while the hero has focus or pointer interaction.
-  const playing = !reduced
-  const [held, setHeld] = useState(false) // focus in the hero or search, or a pointer on the controls
-  const [hidden, setHidden] = useState(false)
+  // The photo being faded out stays fully visible underneath the one fading in, so the crossfade never dips.
+  const [prev, setPrev] = useState(-1)
+  // Paused while the page is hidden or while someone is using the keyboard in the hero or the trip search.
+  const [held, setHeld] = useState(false)
+  const [hidden, setHidden] = useState(() => typeof document !== 'undefined' && document.hidden)
   const [loaded, setLoaded] = useState<Set<number>>(() => new Set())
-  const [announce, setAnnounce] = useState(false)
-  // The photo on screen: it only changes once the chosen slide has loaded, so there is never an empty frame.
-  const [visible, setVisible] = useState(0)
   const n = slides.length
   const next = (index + 1) % n
-  const running = playing && !held && !hidden && n > 1
+  const running = !reduced && !held && !hidden && n > 1
 
   useEffect(() => {
-    if (loaded.has(index)) setVisible(index)
-  }, [index, loaded])
-  useEffect(() => {
     const onVis = () => setHidden(document.hidden)
-    document.addEventListener('visibilitychange', onVis)
-    // Focus anywhere in the hero, or typing in the trip search below it, pauses the slideshow.
     const onFocus = (e: FocusEvent) => setHeld(!!(e.target as Element | null)?.closest?.('[data-hero-hold]'))
+    document.addEventListener('visibilitychange', onVis)
     document.addEventListener('focusin', onFocus)
     return () => {
       document.removeEventListener('visibilitychange', onVis)
@@ -130,43 +118,41 @@ function Hero({ greeting }: { greeting?: string }) {
     }
   }, [])
   useEffect(() => {
-    // Advance only once the next photo is ready, so a slow network never fades to an empty frame.
+    // Change only once the next photo has loaded, so a slow network never fades to an empty frame.
     if (!running || !loaded.has(next)) return
-    const t = window.setTimeout(() => setIndex(next), SLIDE_MS)
+    const t = window.setTimeout(() => {
+      setPrev(index)
+      setIndex(next)
+    }, SLIDE_MS)
     return () => window.clearTimeout(t)
   }, [running, next, loaded, index])
 
-  const go = (i: number) => {
-    setAnnounce(true)
-    setIndex(((i % n) + n) % n)
-  }
-  const slide = slides[index]
-  const hasTour = (id: string) => tours(data).some((s) => s.destinationId === id)
-  // Mount the current, next and previous photos (and any already seen), so the next one is preloaded.
-  const mounted = (i: number) => i === index || i === next || i === (index - 1 + n) % n || loaded.has(i)
+  // The photo on screen and the next two are in the page, so each one is loaded well before it shows.
+  const mounted = (i: number) => i === index || i === next || i === (index + 2) % n || loaded.has(i)
+  const first = slides[0]
 
   return (
-    <section
-      data-hero-hold
-      onPointerDown={() => setHeld(true)}
-      onPointerLeave={() => setHeld(document.activeElement?.closest('[data-hero-hold]') != null)}
-      className="relative isolate h-[min(92svh,860px)] min-h-[620px] overflow-hidden bg-charcoal text-white" aria-labelledby="hero-title" aria-roledescription="slideshow">
-      <div className="absolute inset-0 -z-10" aria-hidden>
-        {slides.map((h, i) =>
-          mounted(i) ? (
+    <section data-hero-hold className="relative isolate h-[min(92svh,860px)] min-h-[620px] overflow-hidden bg-charcoal text-white" aria-labelledby="hero-title">
+      <div className="absolute inset-0 -z-10" aria-hidden data-slide={index}>
+        {/* The first photo's tiny preview fills the frame until the photo itself arrives: no flash, no jump. */}
+        {first?.image.lqip && !loaded.has(0) && (
+          <img src={first.image.lqip} alt="" className="absolute inset-0 size-full scale-110 object-cover blur-xl" style={{ objectPosition: first.image.focus }} />
+        )}
+        {slides.map((dest, i) =>
+          mounted(i) && (!reduced || i === 0) ? (
             <img
-              key={h.destinationId}
-              src={h.dest.image.src}
-              srcSet={srcSetOf(h.dest.image)}
+              key={dest.id}
+              src={dest.image.src}
+              srcSet={srcSetOf(dest.image)}
               sizes="100vw"
               alt=""
-              loading={i === 0 ? 'eager' : 'lazy'}
+              loading="eager"
               fetchPriority={i === 0 ? 'high' : 'low'}
               decoding="async"
               onLoad={() => setLoaded((s) => (s.has(i) ? s : new Set(s).add(i)))}
-              style={{ objectPosition: h.dest.image.focus }}
-              className={`absolute inset-0 size-full object-cover saturate-[0.92] transition-opacity ease-out ${reduced ? 'duration-0' : 'duration-[900ms]'} ${
-                i === visible ? 'opacity-100' : 'opacity-0'
+              style={{ objectPosition: dest.image.focus, transitionDuration: reduced ? '0ms' : `${FADE_MS}ms` }}
+              className={`absolute inset-0 size-full object-cover saturate-[0.92] transition-opacity ease-in-out ${
+                i === index && loaded.has(i) ? 'z-[2] opacity-100' : i === prev ? 'z-[1] opacity-100 transition-none' : 'opacity-0 transition-none'
               }`}
             />
           ) : null,
@@ -194,45 +180,7 @@ function Hero({ greeting }: { greeting?: string }) {
           </Link>
         </div>
       </div>
-
-      <div
-        onPointerEnter={() => setHeld(true)}
-        onPointerLeave={() => setHeld(document.activeElement?.closest('[data-hero-hold]') != null)}
-        className="absolute right-4 bottom-[112px] left-4 flex items-end justify-between gap-3 sm:right-6 sm:left-auto md:bottom-[84px]"
-      >
-        <p className="min-w-0 text-xs text-white/80 sm:max-w-[280px] sm:text-right" aria-live={announce ? 'polite' : 'off'}>
-          <span className="block truncate font-semibold text-white">{slide.caption}</span>
-          <Link key={slide.destinationId} to={`/app/destinations/${slide.dest.id}`} className="fade-in underline underline-offset-2 hover:text-white">
-            {hasTour(slide.dest.id) ? `See tours to ${slide.dest.name}` : `Plan a trip to ${slide.dest.name}`}
-          </Link>
-          {slide.dest.image.credit && <span className="block truncate text-[10px] text-white/60">Photo: {slide.dest.image.credit.author}</span>}
-        </p>
-        {n > 1 && (
-          <div className="flex shrink-0 items-center gap-1 rounded-full bg-black/35 p-1 ring-1 ring-white/15 backdrop-blur-md" role="group" aria-label="Slideshow controls">
-            <HeroButton label="Previous photo" onClick={() => go(index - 1)}>
-              <ChevronLeft className="size-4" aria-hidden />
-            </HeroButton>
-            <span className="px-1 text-[11px] font-semibold text-white/85 tnum" aria-label={`Photo ${index + 1} of ${n}`}>
-              {index + 1}/{n}
-            </span>
-            <HeroButton label="Next photo" onClick={() => go(index + 1)}>
-              <ChevronRight className="size-4" aria-hidden />
-            </HeroButton>
-          </div>
-        )}
-      </div>
-      {running && !reduced && (
-        <span key={index} className="hero-progress absolute inset-x-0 bottom-0 h-0.5 origin-left bg-white/70" style={{ animationDuration: `${SLIDE_MS}ms` }} aria-hidden />
-      )}
     </section>
-  )
-}
-
-function HeroButton({ label, onClick, pressed, children }: { label: string; onClick: () => void; pressed?: boolean; children: ReactNode }) {
-  return (
-    <button type="button" onClick={onClick} aria-label={label} aria-pressed={pressed} className="grid size-8 place-items-center rounded-full text-white/90 transition-colors hover:bg-white/15 hover:text-white">
-      {children}
-    </button>
   )
 }
 

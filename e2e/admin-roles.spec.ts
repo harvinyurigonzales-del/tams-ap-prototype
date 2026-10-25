@@ -1,26 +1,23 @@
-import { expect, test, type Page } from './fixtures'
+import { adminNav, expect, test, type Page, signInSample } from './fixtures'
 
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Admin' })
 
 test('staff do not see admin-only modules, and a direct link shows the lock screen', async ({ page }) => {
   await page.goto('/admin/reports')
-  await page.getByRole('button', { name: 'Use staff account' }).click()
-  // Login always starts on the dashboard; then open the admin-only link in the app (a reload would reset the data).
+  await signInSample(page, 'Liza Manalo')
+  // Login starts on the dashboard; the admin-only link then shows the lock screen.
   await expect(page.getByRole('heading', { name: 'Magandang umaga, Liza' })).toBeVisible()
-  await page.evaluate(() => {
-    history.pushState({}, '', '/admin/reports')
-    dispatchEvent(new PopStateEvent('popstate'))
-  })
+  await page.goto('/admin/reports')
   await expect(page.getByRole('heading', { name: 'Admin only' })).toBeVisible()
   for (const name of ['Reports', 'Tour packages', 'Staff accounts', 'Manage chatbot']) await expect(nav(page).getByRole('link', { name })).toHaveCount(0)
   await expect(page.getByRole('link', { name: /Account settings, Liza Manalo \(Staff\)/ })).toBeVisible()
 
   // Fleet and maintenance are view only for staff.
-  await nav(page).getByRole('link', { name: 'Vehicles' }).click()
+  await adminNav(page, 'Vehicles')
   await expect(page.getByRole('button', { name: 'Add van' })).toHaveCount(0)
   await page.getByRole('button', { name: 'Van 03 details' }).click()
   await expect(page.getByRole('complementary', { name: 'Van 03 details' }).getByText(/View only/)).toBeVisible()
-  await nav(page).getByRole('link', { name: /Maintenance/ }).click()
+  await adminNav(page, 'Maintenance')
   await expect(page.getByRole('heading', { name: 'October 2026' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Schedule maintenance' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Mark done' })).toHaveCount(0)
@@ -34,27 +31,27 @@ test('staff do not see admin-only modules, and a direct link shows the lock scre
 
 test('admin manages fleet, maintenance, staff, packages and chatbot answers', async ({ page }) => {
   await page.goto('/admin/login')
-  await page.getByRole('button', { name: 'Use admin account' }).click()
+  await signInSample(page, 'Admin')
   await expect(page.getByRole('heading', { name: 'Magandang umaga, Admin' })).toBeVisible()
 
   // Add a van, then confirm overdue maintenance so Van 05 is back in service.
-  await nav(page).getByRole('link', { name: 'Vehicles' }).click()
+  await adminNav(page, 'Vehicles')
   await page.getByRole('button', { name: 'Add van' }).click()
   const dlg = page.getByRole('dialog')
   await dlg.getByLabel('Make, model and year').fill('Toyota Hiace (2025)')
   await dlg.getByLabel('Plate number').fill('TMS 1001')
   await dlg.getByRole('button', { name: 'Add van' }).click()
   await expect(dlg.getByText('Another van already has this plate number.')).toBeVisible()
-  await dlg.getByLabel('Plate number').fill('TMS 1007')
+  await dlg.getByLabel('Plate number').fill('TMS 9901')
   await dlg.getByRole('button', { name: 'Add van' }).click()
-  await expect(page.getByRole('button', { name: 'Van 07 details' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Van 16 details' })).toBeVisible()
   await page.getByRole('button', { name: 'Van 01 details' }).click()
   await page.getByRole('button', { name: 'Remove van' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Remove van' }).click()
   await expect(page.getByRole('dialog').getByText(/upcoming trip/)).toBeVisible()
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
 
-  await nav(page).getByRole('link', { name: /Maintenance/ }).click()
+  await adminNav(page, 'Maintenance')
   await expect(page.getByText(/Van 05 is past the scheduled maintenance date/)).toBeVisible()
   await page.getByRole('button', { name: 'Mark done' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Confirm done' }).click()
@@ -63,12 +60,12 @@ test('admin manages fleet, maintenance, staff, packages and chatbot answers', as
   await expect(page.getByText('Van 05 · Oil change and brake check')).toBeVisible()
 
   // Staff accounts: a deactivated account cannot log in.
-  await nav(page).getByRole('link', { name: 'Staff accounts' }).click()
+  await adminNav(page, 'Staff accounts')
   await page.getByRole('button', { name: 'Deactivate Liza Manalo' }).click()
   await expect(page.getByRole('button', { name: 'Reactivate Liza Manalo' })).toBeVisible()
 
   // Tour packages: a package with bookings can be deactivated but not deleted.
-  await nav(page).getByRole('link', { name: 'Tour packages' }).click()
+  await adminNav(page, 'Tour packages')
   await page.getByRole('button', { name: 'Baguio Weekend Escape details' }).click()
   await page.getByRole('button', { name: 'Delete' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Delete package' }).click()
@@ -76,7 +73,7 @@ test('admin manages fleet, maintenance, staff, packages and chatbot answers', as
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
 
   // Chatbot preset answers feed Ask TAMS.
-  await nav(page).getByRole('link', { name: 'Manage chatbot' }).click()
+  await adminNav(page, 'Manage chatbot')
   await page.getByLabel('Customer question').fill('What are your office hours?')
   await page.getByRole('button', { name: 'Check answer' }).click()
   await expect(page.getByText('Preset: Office hours')).toBeVisible()
@@ -84,14 +81,14 @@ test('admin manages fleet, maintenance, staff, packages and chatbot answers', as
   // Log out and try the deactivated account.
   await page.getByRole('button', { name: 'Log out' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Log out' }).click()
-  await page.getByRole('button', { name: 'Use staff account' }).click()
+  await signInSample(page, 'Liza Manalo')
   await expect(page.getByText('This account is deactivated. Ask an admin to turn it back on.')).toBeVisible()
 })
 
 test('planner request: revise after changes are requested, set dates, and resend', async ({ page }) => {
   await page.goto('/admin/login')
-  await page.getByRole('button', { name: 'Use staff account' }).click()
-  await nav(page).getByRole('link', { name: 'Requests' }).click()
+  await signInSample(page, 'Liza Manalo')
+  await adminNav(page, 'Requests')
   await page.getByRole('button', { name: /CR-2026-0013/ }).click()
   const response = page.getByRole('region', { name: 'Customer response' })
   await expect(response.getByText('Changes requested')).toBeVisible()
@@ -115,10 +112,12 @@ test('planner request: revise after changes are requested, set dates, and resend
 test('log out from the profile, and login starts on Home', async ({ page }) => {
   // Customer: a guest bounced from a tab lands on Home after login.
   await page.goto('/app/trips')
-  await page.getByRole('button', { name: 'Use sample account' }).click()
+  await signInSample(page, 'Maria Santos')
   await expect(page).toHaveURL(/\/app$/)
-  await page.goto('/app/account')
-  await page.getByRole('button', { name: 'Use sample account' }).click()
+  // Signed in, the login page sends Maria back to her own workspace, and staff pages send her to the customer site.
+  await page.goto('/app/login')
+  await expect(page).toHaveURL(/\/app$/)
+  await page.goto('/admin')
   await expect(page).toHaveURL(/\/app$/)
   await page.getByRole('button', { name: /Account menu for/ }).click()
   await page.getByRole('button', { name: 'Log out' }).click()
@@ -127,7 +126,7 @@ test('log out from the profile, and login starts on Home', async ({ page }) => {
 
   // Admin: the avatar opens Account, which has Log out.
   await page.goto('/admin/login')
-  await page.getByRole('button', { name: 'Use admin account' }).click()
+  await signInSample(page, 'Admin')
   await page.getByRole('link', { name: /Account settings/ }).click()
   await page.getByRole('main').getByRole('button', { name: 'Log out' }).click()
   await expect(page.getByRole('heading', { name: 'Staff login' })).toBeVisible()

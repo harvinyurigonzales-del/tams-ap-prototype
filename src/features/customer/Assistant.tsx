@@ -9,11 +9,21 @@ import { Button, LinkButton } from '../../ui/Button'
 import { Select, TextArea, TextField } from '../../ui/Field'
 
 /**
- * Ask TAMS: a branded launcher in the bottom-right corner that opens the help panel just above it. On phones it
- * sits clear of the bottom navigation and the device safe area, and the panel opens as a sheet.
+ * Ask TAMS: on larger screens a branded launcher in the bottom-right corner opens the help panel just above it.
+ * On phones the centre button of the bottom navigation opens it as a sheet instead, and moving to another page
+ * ends the conversation.
  */
 export function AssistantMount() {
   const open = useAssistant((s) => s.open)
+  const { pathname } = useLocation()
+  const first = useRef(true)
+  useEffect(() => {
+    if (first.current) {
+      first.current = false
+      return
+    }
+    if (useAssistant.getState().open && !window.matchMedia('(min-width: 768px)').matches) useAssistant.getState().close()
+  }, [pathname])
   return (
     <>
       <AskTamsLauncher />
@@ -41,9 +51,7 @@ function AskTamsLauncher() {
       aria-haspopup="dialog"
       aria-label={open ? 'Close Ask TAMS' : 'Ask TAMS'}
       title="Ask TAMS: quick answers about trips, prices and payments"
-      className={`launcher fixed right-4 z-40 inline-flex h-12 items-center gap-2 rounded-full pr-4 pl-2 text-sm font-semibold text-white shadow-[0_10px_28px_-10px_rgba(14,29,61,0.65)] ring-1 ring-white/15 transition-[transform,background-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_32px_-10px_rgba(14,29,61,0.7)] focus-visible:outline-offset-4 active:translate-y-0 bottom-[calc(76px+env(safe-area-inset-bottom)+var(--launcher-raise,0px))] md:right-6 md:bottom-[calc(24px+var(--launcher-raise-md,0px))] ${
-        open ? 'max-md:hidden bg-charcoal' : 'bg-navy hover:bg-brand-700'
-      }`}
+      className={`launcher fixed right-4 z-40 inline-flex h-12 items-center gap-2 rounded-full pr-4 pl-2 text-sm font-semibold text-white shadow-[0_10px_28px_-10px_rgba(14,29,61,0.65)] ring-1 ring-white/15 transition-[transform,background-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_32px_-10px_rgba(14,29,61,0.7)] focus-visible:outline-offset-4 active:translate-y-0 max-md:hidden md:right-6 md:bottom-[calc(24px+var(--launcher-raise-md,0px))] ${open ? 'bg-charcoal' : 'bg-navy hover:bg-brand-700'}`}
     >
       <span className="relative grid size-8 place-items-center rounded-full bg-white/12">
         {open ? <X className="size-[18px]" aria-hidden /> : <MessageCircleQuestion className="size-[18px]" aria-hidden />}

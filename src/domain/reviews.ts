@@ -24,12 +24,23 @@ export function ratingOf(reviews: Review[]): Rating {
 export const reviewsFor = (d: Dataset, serviceId: string) => d.reviews.filter((r) => r.serviceId === serviceId)
 export const ratingFor = (d: Dataset, serviceId: string) => ratingOf(reviewsFor(d, serviceId))
 
-/** Completed tour trips of a customer that do not have a review yet. */
+/** A customer's own completed trips that do not have a review yet, most recent first. */
 export function reviewableTrips(d: Dataset, customerId: string | null): Booking[] {
   if (!customerId) return []
-  return d.bookings.filter(
-    (b) => b.customerId === customerId && b.status === 'Completed' && !b.rental && b.serviceId !== 'SVC-CUSTOM' && !d.reviews.some((r) => r.bookingId === b.id),
-  )
+  return d.bookings
+    .filter((b) => b.customerId === customerId && b.status === 'Completed' && !d.reviews.some((r) => r.bookingId === b.id))
+    .sort((a, b) => b.startDate.localeCompare(a.startDate))
+}
+
+/** The customer's completed trips that already have their review. */
+export function reviewedTrips(d: Dataset, customerId: string | null): { booking: Booking; review: Review }[] {
+  if (!customerId) return []
+  return d.bookings
+    .filter((b) => b.customerId === customerId && b.status === 'Completed')
+    .flatMap((b) => {
+      const review = d.reviews.find((r) => r.bookingId === b.id)
+      return review ? [{ booking: b, review }] : []
+    })
 }
 
 export type Eligibility = { ok: true; trips: Booking[] } | { ok: false; reason: 'guest' | 'no-trips' | 'all-reviewed' }
@@ -49,13 +60,13 @@ export const publicName = (full: string) => {
   return last ? `${first} ${last[0]}.` : first
 }
 
-export function validateReview(input: { rating: number; title: string; text: string }) {
-  const errors: { rating?: string; title?: string; text?: string } = {}
-  if (!(input.rating >= 1 && input.rating <= 5)) errors.rating = 'Choose a star rating.'
-  if (!input.title.trim()) errors.title = 'Add a short title.'
-  else if (input.title.trim().length > 80) errors.title = 'Keep the title under 80 characters.'
-  if (input.text.trim().length < 20) errors.text = 'Tell other travellers a little more (at least 20 characters).'
-  else if (input.text.trim().length > 1000) errors.text = 'Keep the review under 1,000 characters.'
+/** Only the star rating is required. A title, a written review and a suggestion are optional. */
+export function validateReview(input: { rating: number; title?: string; text?: string; suggestion?: string }) {
+  const errors: { rating?: string; title?: string; text?: string; suggestion?: string } = {}
+  if (!(Number.isInteger(input.rating) && input.rating >= 1 && input.rating <= 5)) errors.rating = 'Choose a star rating from 1 to 5.'
+  if ((input.title ?? '').trim().length > 80) errors.title = 'Keep the title under 80 characters.'
+  if ((input.text ?? '').trim().length > 1000) errors.text = 'Keep the review under 1,000 characters.'
+  if ((input.suggestion ?? '').trim().length > 500) errors.suggestion = 'Keep the suggestion under 500 characters.'
   return errors
 }
 

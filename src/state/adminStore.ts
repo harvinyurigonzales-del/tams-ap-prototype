@@ -1,16 +1,17 @@
 import { create } from 'zustand'
-import { demoNowStamp } from '../lib/demoClock'
+import { addDays, DEMO_TODAY, demoNowStamp } from '../lib/demoClock'
 import { peso } from '../lib/format'
 import { canTransition, draftCustomProposal, PROPOSAL_VALID_DAYS, requestDestination } from '../domain/requests'
-import { assignableTargets, canCancel, canConfirm, driverConflict, shortRange, vehicleConflict } from '../domain/rules'
-import { addDays } from '../lib/demoClock'
-import { adminSeed } from '../seed/derive'
-import { DEMO_TODAY } from '../lib/demoClock'
-import { buildPlan, requestDates, sampleAnswers, toPlannedTrip } from '../domain/planner/engine'
+import { assignableTargets, canCancel, canConfirm, driverConflict, money, shortRange, vehicleConflict } from '../domain/rules'
+import type { MaintenanceRecord } from '../seed/derive'
 import type { AppNotification, CustomRequest, Dataset, Driver, Proposal, RentalRequest, Service, Vehicle } from '../seed/types'
 import { nextId } from './ids'
+import { freshState, markSignedOut, readSession, startingState, writeSession } from './persist'
 
-// Admin simulation: its own in-memory working copy of the seed. It never sees anything the customer demo did.
+// Staff portal state. The business records (`data`) are the same saved records the customer site uses
+// (see persist.ts and sync.ts), so a booking Maria makes shows up here and a staff update reaches her.
+
+export type { MaintenanceRecord }
 
 export const DEMO_ADMIN = { email: 'admin@tamsap.example.com', password: 'Admin2026!', name: 'Admin' }
 export const DEMO_STAFF = { email: 'staff@tamsap.example.com', password: 'Staff2026!', name: 'Liza Manalo' }
@@ -32,18 +33,6 @@ export interface StaffAccount {
   mobile: string
   active: boolean
   createdAt: string
-}
-
-export interface MaintenanceRecord {
-  id: string
-  vehicleId: string
-  type: string
-  from: string
-  to: string
-  note: string
-  status: 'Scheduled' | 'Done'
-  doneAt?: string
-  doneNote?: string
 }
 
 export interface BusinessSettings {
@@ -95,6 +84,10 @@ interface AdminState {
   rejectPayment: (paymentId: string, reason: string) => Result
   confirmBooking: (bookingId: string) => Result
   cancelBooking: (bookingId: string, reason: string) => Result
+  declineCancellation: (bookingId: string) => Result
+  /** Marks a confirmed, fully paid trip as completed, which lets the customer rate it. */
+  completeBooking: (bookingId: string) => Result
+  sendReminder: (bookingId: string) => Result
   assign: (target: { kind: 'departure' | 'booking'; id: string }, vehicleId: string, driverId: string) => Result
   markRead: (id: string) => void
   markAllRead: () => void
@@ -114,64 +107,6 @@ const SEED_STAFF: StaffAccount[] = [
   { id: 'STF-04', name: 'Grace Lim', email: 'grace.lim@tamsap.example.com', password: 'Grace2026!', role: 'Staff', title: 'Customer service (seasonal)', mobile: '0900 555 0304', active: false, createdAt: '2025-11-20' },
 ]
 
-const VAN_EXTRAS: Record<string, Pick<Vehicle, 'color' | 'odometer'>> = {
-  'VAN-01': { color: 'White', odometer: 38450 }, 'VAN-02': { color: 'Silver', odometer: 52120 }, 'VAN-03': { color: 'Black', odometer: 29870 },
-  'VAN-04': { color: 'White', odometer: 61300 }, 'VAN-05': { color: 'White', odometer: 74880 }, 'VAN-06': { color: 'Gray', odometer: 45210 },
-}
-const DRIVER_EXTRAS: Record<string, Pick<Driver, 'license' | 'licenseExpiry' | 'since'>> = {
-  'DRV-01': { license: 'N01-18-004521', licenseExpiry: '2028-04-12', since: '2019-02-01' },
-  'DRV-02': { license: 'N03-17-112094', licenseExpiry: '2027-08-30', since: '2020-07-15' },
-  'DRV-03': { license: 'N02-20-087713', licenseExpiry: '2026-12-05', since: '2021-03-10' },
-  'DRV-04': { license: 'N01-19-230118', licenseExpiry: '2029-01-22', since: '2022-05-01' },
-  'DRV-05': { license: 'N04-21-045067', licenseExpiry: '2027-11-18', since: '2023-09-04' },
-}
-
-/** Fleet details, the maintenance schedule and one trip-planner request, added on top of the shared seed. */
-function adminData() {
-  const data = adminSeed()
-  data.vehicles.forEach((v) => Object.assign(v, VAN_EXTRAS[v.id]))
-  data.drivers.forEach((d) => Object.assign(d, DRIVER_EXTRAS[d.id]))
-  const maintenance: MaintenanceRecord[] = []
-  const add = (vehicleId: string, type: string, from: string, to: string, note: string, done?: string) => {
-    const id = `MNT-${String(maintenance.length + 1).padStart(2, '0')}`
-    maintenance.push({ id, vehicleId, type, from, to, note, status: done ? 'Done' : 'Scheduled', ...(done ? { doneAt: done, doneNote: 'Completed as scheduled.' } : {}) })
-    const v = data.vehicles.find((x) => x.id === vehicleId)!
-    if (!done) {
-      const existing = v.blocks.find((b) => b.kind === 'maintenance' && b.from === from)
-      if (existing) Object.assign(existing, { ref: id, untilDone: true, note: type })
-      else v.blocks.push({ from, to, kind: 'maintenance', note: type, ref: id, untilDone: true })
-    }
-  }
-  add('VAN-04', 'Preventive maintenance (60,000 km)', addDays(DEMO_TODAY, -30), addDays(DEMO_TODAY, -29), 'Oil, filters and brake pads.', `${addDays(DEMO_TODAY, -29)}T16:00:00+08:00`)
-  const van3 = data.vehicles.find((v) => v.id === 'VAN-03')!.blocks.find((b) => b.kind === 'maintenance')
-  if (van3) add('VAN-03', 'Scheduled maintenance', van3.from, van3.to, 'Aircon cleaning and tire rotation.')
-  add('VAN-05', 'Oil change and brake check', addDays(DEMO_TODAY, -3), addDays(DEMO_TODAY, -2), 'Due at 75,000 km.')
-  add('VAN-02', 'Tire rotation and alignment', addDays(DEMO_TODAY, 18), addDays(DEMO_TODAY, 18), '')
-  add('VAN-01', 'Preventive maintenance (40,000 km)', addDays(DEMO_TODAY, 37), addDays(DEMO_TODAY, 38), 'Book the casa service bay.')
-
-  // A request sent from the TAMS Trip Planner, where the customer has asked for changes to the first proposal.
-  const a = sampleAnswers()
-  const dest = data.destinations.find((x) => x.id === a.destination.id)!
-  const plan = toPlannedTrip(buildPlan(a, dest), a)
-  const { startDate, endDate } = requestDates(a)
-  const stamp = (days: number, hhmm: string) => `${addDays(DEMO_TODAY, days)}T${hhmm}:00+08:00`
-  const r: CustomRequest = {
-    id: nextId(data, 'customRequest'), customerId: 'CUS-0003', destinationId: dest.id, startDate, endDate, flexibility: 'Flexible dates',
-    groupSize: a.group.size, pickup: 'Malolos Cathedral', budgetMin: 0, budgetMax: a.budget.amount ?? plan.perPerson, interests: ['Beach', 'Food'],
-    requests: a.prefs.notes, contactName: 'Angelica Reyes', contactMobile: '0900 555 0103', planMode: 'suggested',
-    stops: plan.stops.map((x) => x.name), pace: plan.pace, plan, status: 'Under review', createdAt: stamp(-4, '20:15'), origin: 'seed',
-    events: [
-      { at: stamp(-4, '20:15'), status: 'Submitted', note: 'Trip request sent from the TAMS Trip Planner.' },
-      { at: stamp(-3, '09:10'), status: 'Under review', note: 'Staff are checking rooms near the beach.' },
-      { at: stamp(-3, '15:40'), status: 'Proposal ready', note: 'Proposal sent.' },
-      { at: stamp(-1, '21:05'), status: 'Under review', note: 'Customer asked for changes: “Can we add a beginner surf lesson and keep it under ₱6,000 each?”' },
-    ],
-  }
-  r.proposal = { ...draftCustomProposal(r, dest, stamp(-3, '15:40')), startDate, endDate, datesSet: true }
-  data.customRequests.push(r)
-  return { data, maintenance }
-}
-
 const DEFAULT_SETTINGS: BusinessSettings = {
   businessName: 'TAMS AP Travel and Tours',
   email: 'hello@tamsap.example.com',
@@ -180,15 +115,26 @@ const DEFAULT_SETTINGS: BusinessSettings = {
   hours: 'Mon–Sat, 8:00 AM to 6:00 PM',
 }
 
-const initial = () => ({
-  ...adminData(),
-  loggedIn: false,
-  userId: null as string | null,
-  accounts: structuredClone(SEED_STAFF),
-  settings: { ...DEFAULT_SETTINGS },
-  failedAttempts: 0,
-  lockedUntil: null as number | null,
-})
+const signedIn = (accounts: StaffAccount[]) => {
+  const id = readSession().staffId
+  return id && accounts.some((a) => a.id === id && a.active) ? id : null
+}
+
+const initial = (fresh = false) => {
+  const s = fresh ? freshState() : startingState()
+  const accounts = (s.staffAccounts as StaffAccount[] | undefined) ?? structuredClone(SEED_STAFF)
+  const userId = fresh ? null : signedIn(accounts)
+  return {
+    data: s.data,
+    maintenance: s.maintenance,
+    loggedIn: !!userId,
+    userId,
+    accounts,
+    settings: (s.settings as BusinessSettings | undefined) ?? { ...DEFAULT_SETTINGS },
+    failedAttempts: 0,
+    lockedUntil: null as number | null,
+  }
+}
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const MOBILE = /^(09|\+639)\d{9}$/
@@ -201,10 +147,20 @@ const ADMIN_ONLY = 'Only an admin can do this.'
 export const useMe = () => useAdmin((s) => s.accounts.find((a) => a.id === s.userId))
 export const useIsAdmin = () => useAdmin((s) => s.accounts.find((a) => a.id === s.userId)?.role === 'Admin')
 
-/** Adds a staff activity entry. Admin actions are already seen, so they are created as read. */
+/** Adds a staff activity entry. Staff actions are already seen, so they are created as read. */
 function activity(d: Dataset, at: string, n: Omit<AppNotification, 'id' | 'at' | 'read' | 'origin'>) {
   d.notifications.unshift({ id: nextId(d, 'notification'), at, read: true, origin: 'local', ...n })
 }
+
+/** Tells the customer about a staff update. It shows in their bell and Notifications page. */
+function tell(d: Dataset, customerId: string, at: string, n: Pick<AppNotification, 'category' | 'title' | 'body' | 'link'>) {
+  d.notifications.unshift({ id: nextId(d, 'notification'), at, read: false, customerId, origin: 'local', ...n })
+}
+
+/** Staff notifications only; customer notifications share the same list. */
+export const staffNotifications = (d: Dataset) => d.notifications.filter((n) => !n.customerId)
+
+const tripTitle = (d: Dataset, b: { serviceId: string; label?: string }) => b.label ?? d.services.find((x) => x.id === b.serviceId)?.name ?? 'your trip'
 
 const findRequest = (d: Dataset, kind: 'custom' | 'rental', id: string): CustomRequest | RentalRequest | undefined =>
   kind === 'custom' ? d.customRequests.find((x) => x.id === id) : d.rentalRequests.find((x) => x.id === id)
@@ -232,23 +188,30 @@ export const useAdmin = create<AdminState>((set, get) => ({
       return { ok: false, error: `Email or password is incorrect. ${MAX_ATTEMPTS - failedAttempts} attempts left.` }
     }
     set({ loggedIn: true, userId: acct.id, failedAttempts: 0, lockedUntil: null })
+    writeSession({ staffId: acct.id })
     return { ok: true }
   },
 
-  logout: () => set({ loggedIn: false, userId: null }),
+  logout: () => {
+    markSignedOut()
+    set({ loggedIn: false, userId: null })
+    writeSession({ staffId: null })
+  },
 
   verifyPayment: (paymentId) => {
     const data = structuredClone(get().data)
     const p = data.payments.find((x) => x.id === paymentId)
     if (!p || p.status !== 'Submitted') return { ok: false, error: 'Only a submitted payment can be verified.' }
     const b = data.bookings.find((x) => x.id === p.bookingId)!
-    const at = demoNowStamp('admin')
+    const at = demoNowStamp()
     p.status = 'Verified'
     p.reviewedAt = at
     activity(data, at, {
       category: 'Payments', title: 'Payment verified',
       body: `${b.id} (${customerName(data, b.customerId)}) ${p.type.toLowerCase()} of ${peso(p.amount)}.`, link: `/admin/bookings?id=${b.id}`,
     })
+    const m = money(b, data.payments)
+    tell(data, b.customerId, at, { category: 'Payments', title: 'Payment verified', body: `${peso(p.amount)} for ${b.id}. ${m.balance > 0 ? `Balance ${peso(m.balance)}.` : 'Fully paid.'}`, link: `/app/trips/${b.id}` })
     set({ data })
     return { ok: true }
   },
@@ -259,13 +222,14 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const p = data.payments.find((x) => x.id === paymentId)
     if (!p || p.status !== 'Submitted') return { ok: false, error: 'Only a submitted payment can be rejected.' }
     const b = data.bookings.find((x) => x.id === p.bookingId)!
-    const at = demoNowStamp('admin')
+    const at = demoNowStamp()
     p.status = 'Rejected'
     p.reviewedAt = at
     p.rejectReason = reason.trim()
     activity(data, at, {
       category: 'Payments', title: 'Payment rejected', body: `${b.id} (${customerName(data, b.customerId)}): ${p.rejectReason}`, link: `/admin/bookings?id=${b.id}`,
     })
+    tell(data, b.customerId, at, { category: 'Payments', title: 'Payment needs a new proof', body: `${b.id}: ${p.rejectReason}`, link: `/app/trips/${b.id}` })
     set({ data })
     return { ok: true }
   },
@@ -276,14 +240,15 @@ export const useAdmin = create<AdminState>((set, get) => ({
     if (!b) return { ok: false, error: 'Booking not found.' }
     const check = canConfirm(b, data.payments)
     if (!check.ok) return { ok: false, error: check.reason }
-    const at = demoNowStamp('admin')
+    const at = demoNowStamp()
     b.status = 'Confirmed'
     b.confirmedAt = at
     const svc = data.services.find((s) => s.id === b.serviceId)!
     activity(data, at, {
       category: 'Bookings', title: 'Booking confirmed',
-      body: `${b.id} (${customerName(data, b.customerId)}) · ${svc.name}, ${shortRange(b.startDate, b.endDate)}.`, link: `/admin/bookings?id=${b.id}`,
+      body: `${b.id} (${customerName(data, b.customerId)}) · ${b.label ?? svc.name}, ${shortRange(b.startDate, b.endDate)}.`, link: `/admin/bookings?id=${b.id}`,
     })
+    tell(data, b.customerId, at, { category: 'Bookings', title: 'Booking confirmed', body: `${b.id} · ${tripTitle(data, b)}, ${shortRange(b.startDate, b.endDate)}. Your seats are secured.`, link: `/app/trips/${b.id}` })
     set({ data })
     return { ok: true }
   },
@@ -295,7 +260,7 @@ export const useAdmin = create<AdminState>((set, get) => ({
     if (!b) return { ok: false, error: 'Booking not found.' }
     const check = canCancel(b)
     if (!check.ok) return { ok: false, error: check.reason }
-    const at = demoNowStamp('admin')
+    const at = demoNowStamp()
     b.status = 'Cancelled'
     b.cancelReason = reason.trim()
     b.cancelledAt = at
@@ -306,6 +271,52 @@ export const useAdmin = create<AdminState>((set, get) => ({
     activity(data, at, {
       category: 'Bookings', title: 'Booking cancelled', body: `${b.id} (${customerName(data, b.customerId)}): ${b.cancelReason}`, link: `/admin/bookings?id=${b.id}`,
     })
+    tell(data, b.customerId, at, { category: 'Bookings', title: 'Booking cancelled', body: `${b.id} · ${tripTitle(data, b)}: ${b.cancelReason}. Staff will contact you about any refund.`, link: `/app/trips/${b.id}` })
+    set({ data })
+    return { ok: true }
+  },
+
+  declineCancellation: (bookingId) => {
+    const data = structuredClone(get().data)
+    const b = data.bookings.find((x) => x.id === bookingId)
+    if (!b || !b.cancellationRequested) return { ok: false, error: 'There is no cancellation request on this booking.' }
+    const at = demoNowStamp()
+    b.cancellationRequested = false
+    activity(data, at, { category: 'Bookings', title: 'Cancellation declined', body: `${b.id} (${customerName(data, b.customerId)}) stays booked.`, link: `/admin/bookings?id=${b.id}` })
+    tell(data, b.customerId, at, { category: 'Bookings', title: 'Cancellation not approved', body: `${b.id} stays booked. Message staff if you need help.`, link: `/app/trips/${b.id}` })
+    set({ data })
+    return { ok: true }
+  },
+
+  completeBooking: (bookingId) => {
+    const data = structuredClone(get().data)
+    const b = data.bookings.find((x) => x.id === bookingId)
+    if (!b) return { ok: false, error: 'Booking not found.' }
+    if (b.status !== 'Confirmed') return { ok: false, error: 'Only a confirmed booking can be marked completed.' }
+    if (b.cancellationRequested) return { ok: false, error: 'Answer the cancellation request first.' }
+    const m = money(b, data.payments)
+    if (m.balance > 0) return { ok: false, error: `Record the balance of ${peso(m.balance)} before completing the trip.` }
+    const at = demoNowStamp()
+    b.status = 'Completed'
+    b.completedAt = at
+    activity(data, at, { category: 'Bookings', title: 'Trip completed', body: `${b.id} (${customerName(data, b.customerId)}) · ${tripTitle(data, b)}.`, link: `/admin/bookings?id=${b.id}` })
+    tell(data, b.customerId, at, { category: 'Bookings', title: 'Trip completed', body: `Thanks for travelling with us on ${tripTitle(data, b)}! Rate your trip to help other travellers.`, link: `/app/reviews?trip=${b.id}` })
+    set({ data })
+    return { ok: true }
+  },
+
+  sendReminder: (bookingId) => {
+    const data = structuredClone(get().data)
+    const b = data.bookings.find((x) => x.id === bookingId)
+    if (!b || b.status !== 'Confirmed') return { ok: false, error: 'Reminders go to confirmed bookings only.' }
+    const svc = data.services.find((x) => x.id === b.serviceId)!
+    const m = money(b, data.payments)
+    const at = demoNowStamp()
+    tell(data, b.customerId, at, {
+      category: 'Travel', title: 'Trip reminder',
+      body: `${tripTitle(data, b)} on ${shortRange(b.startDate, b.endDate)}. Pickup ${b.rental ? b.rental.pickup : svc.pickup}.${m.balance > 0 ? ` Balance of ${peso(m.balance)} is due before the trip.` : ''}`, link: `/app/trips/${b.id}`,
+    })
+    activity(data, at, { category: 'Travel', title: 'Reminder sent', body: `${b.id} (${customerName(data, b.customerId)}).`, link: `/admin/bookings?id=${b.id}` })
     set({ data })
     return { ok: true }
   },
@@ -327,23 +338,31 @@ export const useAdmin = create<AdminState>((set, get) => ({
     } else {
       data.assignments.push({ id: nextId(data, 'assignment'), target: { kind: t.kind, id: t.id }, from: t.from, to: t.to, vehicleId: v.id, driverId: dr.id, origin: 'local' })
     }
-    activity(data, demoNowStamp('admin'), {
+    const at = demoNowStamp()
+    activity(data, at, {
       category: 'Fleet', title: 'Van and driver assigned', body: `${t.label}, ${shortRange(t.from, t.to)} · ${v.name} with ${dr.name}.`, link: '/admin/calendar',
     })
+    const riders = data.bookings.filter((b) => (t.kind === 'departure' ? b.departureId === t.id : b.id === t.id) && b.status === 'Confirmed')
+    for (const b of riders) {
+      tell(data, b.customerId, at, { category: 'Travel', title: existing ? 'Van or driver changed' : 'Van and driver assigned', body: `${tripTitle(data, b)}: ${v.name} (${v.plate}) with ${dr.name}.`, link: `/app/trips/${b.id}` })
+    }
     set({ data })
     return { ok: true }
   },
 
   markRead: (id) => {
     const data = structuredClone(get().data)
-    const n = data.notifications.find((x) => x.id === id)
-    if (n) n.read = true
+    const n = data.notifications.find((x) => x.id === id && !x.customerId)
+    if (!n || n.read) return
+    n.read = true
     set({ data })
   },
 
   markAllRead: () => {
     const data = structuredClone(get().data)
-    data.notifications.forEach((n) => (n.read = true))
+    data.notifications.forEach((n) => {
+      if (!n.customerId) n.read = true
+    })
     set({ data })
   },
 
@@ -352,8 +371,10 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const data = structuredClone(get().data)
     const q = data.inquiries.find((x) => x.id === inquiryId)
     if (!q) return { ok: false, error: 'Inquiry not found.' }
-    q.messages.push({ from: 'staff', at: demoNowStamp('admin'), text: text.trim(), simulated: true })
+    const at = demoNowStamp()
+    q.messages.push({ from: 'staff', at, text: text.trim() })
     q.status = 'Staff replied'
+    tell(data, q.customerId, at, { category: 'Messages', title: 'Staff replied', body: q.subject, link: `/app/messages/${q.id}` })
     set({ data })
     return { ok: true }
   },
@@ -364,7 +385,7 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const data = structuredClone(get().data)
     const r = data.reviews.find((x) => x.id === reviewId)
     if (!r) return { ok: false, error: 'Review not found.' }
-    r.staffReply = { text: text.trim(), at: demoNowStamp('admin') }
+    r.staffReply = { text: text.trim(), at: demoNowStamp() }
     set({ data })
     return { ok: true }
   },
@@ -382,10 +403,11 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const data = structuredClone(get().data)
     const r = findRequest(data, kind, id)
     if (!r || !canTransition(r.status, 'Under review') || r.status !== 'Submitted') return { ok: false, error: 'Only a submitted request can be moved to review.' }
-    const at = demoNowStamp('admin')
+    const at = demoNowStamp()
     r.status = 'Under review'
     r.events.push({ at, status: 'Under review', note: 'Staff started reviewing the request.' })
     activity(data, at, { category: 'Requests', title: 'Request under review', body: `${r.id} (${customerName(data, r.customerId)}).`, link: `/admin/requests?id=${r.id}` })
+    tell(data, r.customerId, at, { category: 'Requests', title: 'Request under review', body: `${r.id}: staff are working on your ${kind === 'custom' ? 'proposal' : 'quote'}.`, link: kind === 'custom' ? `/app/custom/${r.id}` : `/app/rentals/${r.id}` })
     set({ data })
     return { ok: true }
   },
@@ -395,7 +417,7 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const data = structuredClone(get().data)
     const r = findRequest(data, kind, id)
     if (!r || r.status !== 'Under review') return { ok: false, error: 'Move the request to review first.' }
-    const at = demoNowStamp('admin')
+    const at = demoNowStamp()
     const validUntil = addDays(at.slice(0, 10), PROPOSAL_VALID_DAYS)
     if (kind === 'custom') {
       const c = r as CustomRequest
@@ -412,6 +434,10 @@ export const useAdmin = create<AdminState>((set, get) => ({
     r.status = 'Proposal ready'
     r.events.push({ at, status: 'Proposal ready', note: `${kind === 'custom' ? 'Proposal' : 'Quote'} sent: ${peso(total)}.` })
     activity(data, at, { category: 'Requests', title: kind === 'custom' ? 'Proposal sent' : 'Quote sent', body: `${r.id} (${customerName(data, r.customerId)}) · ${peso(total)}.`, link: `/admin/requests?id=${r.id}` })
+    tell(data, r.customerId, at, {
+      category: 'Requests', title: kind === 'custom' ? 'Your trip proposal is ready' : 'Your van rental quote is ready', body: `${r.id}: ${peso(total)}. Review it and accept or ask for changes.`,
+      link: kind === 'custom' ? `/app/custom/${r.id}` : `/app/rentals/${r.id}`,
+    })
     set({ data })
     return { ok: true }
   },
@@ -421,10 +447,11 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const data = structuredClone(get().data)
     const r = findRequest(data, kind, id)
     if (!r || !canTransition(r.status, 'Closed')) return { ok: false, error: 'This request can no longer be closed.' }
-    const at = demoNowStamp('admin')
+    const at = demoNowStamp()
     r.status = 'Closed'
     r.events.push({ at, status: 'Closed', note: reason.trim() })
     activity(data, at, { category: 'Requests', title: 'Request closed', body: `${r.id} (${customerName(data, r.customerId)}): ${reason.trim()}`, link: `/admin/requests?id=${r.id}` })
+    tell(data, r.customerId, at, { category: 'Requests', title: 'Request closed', body: `${r.id}: ${reason.trim()}`, link: kind === 'custom' ? `/app/custom/${r.id}` : `/app/rentals/${r.id}` })
     set({ data })
     return { ok: true }
   },
@@ -508,7 +535,7 @@ export const useAdmin = create<AdminState>((set, get) => ({
       vid = `VAN-${String(n).padStart(2, '0')}`
       data.vehicles.push({ id: vid, ...clean, blocks: [] })
     }
-    activity(data, demoNowStamp('admin'), { category: 'Fleet', title: id ? 'Van details updated' : 'Van added', body: `${clean.name} · ${clean.plate}.`, link: `/admin/vehicles?id=${vid}` })
+    activity(data, demoNowStamp(), { category: 'Fleet', title: id ? 'Van details updated' : 'Van added', body: `${clean.name} · ${clean.plate}.`, link: `/admin/vehicles?id=${vid}` })
     set({ data })
     return OK
   },
@@ -522,7 +549,7 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const v = data.vehicles.find((x) => x.id === id)
     if (!v) return fail('Van not found.')
     data.vehicles = data.vehicles.filter((x) => x.id !== id)
-    activity(data, demoNowStamp('admin'), { category: 'Fleet', title: 'Van removed', body: `${v.name} · ${v.plate}.`, link: '/admin/vehicles' })
+    activity(data, demoNowStamp(), { category: 'Fleet', title: 'Van removed', body: `${v.name} · ${v.plate}.`, link: '/admin/vehicles' })
     set({ data, maintenance: s.maintenance.filter((m) => m.vehicleId !== id) })
     return OK
   },
@@ -544,7 +571,7 @@ export const useAdmin = create<AdminState>((set, get) => ({
       did = `DRV-${String(n).padStart(2, '0')}`
       data.drivers.push({ id: did, ...clean, since: clean.since || DEMO_TODAY, blocks: [] })
     }
-    activity(data, demoNowStamp('admin'), { category: 'Fleet', title: id ? 'Driver details updated' : 'Driver added', body: clean.name, link: `/admin/drivers?id=${did}` })
+    activity(data, demoNowStamp(), { category: 'Fleet', title: id ? 'Driver details updated' : 'Driver added', body: clean.name, link: `/admin/drivers?id=${did}` })
     set({ data })
     return OK
   },
@@ -558,7 +585,7 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const d = data.drivers.find((x) => x.id === id)
     if (!d) return fail('Driver not found.')
     data.drivers = data.drivers.filter((x) => x.id !== id)
-    activity(data, demoNowStamp('admin'), { category: 'Fleet', title: 'Driver removed', body: d.name, link: '/admin/drivers' })
+    activity(data, demoNowStamp(), { category: 'Fleet', title: 'Driver removed', body: d.name, link: '/admin/drivers' })
     set({ data })
     return OK
   },
@@ -574,7 +601,7 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const n = Math.max(0, ...s.maintenance.map((m) => Number(m.id.slice(4)))) + 1
     const id = `MNT-${String(n).padStart(2, '0')}`
     v.blocks.push({ from: x.from, to: x.to, kind: 'maintenance', note: x.type.trim(), ref: id, untilDone: true })
-    activity(data, demoNowStamp('admin'), { category: 'Fleet', title: 'Maintenance scheduled', body: `${v.name} · ${x.type.trim()}, ${shortRange(x.from, x.to)}.`, link: '/admin/maintenance' })
+    activity(data, demoNowStamp(), { category: 'Fleet', title: 'Maintenance scheduled', body: `${v.name} · ${x.type.trim()}, ${shortRange(x.from, x.to)}.`, link: '/admin/maintenance' })
     set({ data, maintenance: [...s.maintenance, { id, ...x, type: x.type.trim(), note: x.note.trim(), status: 'Scheduled' }] })
     return OK
   },
@@ -590,7 +617,7 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const v = data.vehicles.find((y) => y.id === m.vehicleId)!
     const blk = v.blocks.find((b) => b.ref === id)
     if (blk) Object.assign(blk, { from, to })
-    activity(data, demoNowStamp('admin'), { category: 'Fleet', title: 'Maintenance rescheduled', body: `${v.name} · ${m.type}, now ${shortRange(from, to)}.`, link: '/admin/maintenance' })
+    activity(data, demoNowStamp(), { category: 'Fleet', title: 'Maintenance rescheduled', body: `${v.name} · ${m.type}, now ${shortRange(from, to)}.`, link: '/admin/maintenance' })
     set({ data, maintenance: s.maintenance.map((y) => (y.id === id ? { ...y, from, to } : y)) })
     return OK
   },
@@ -604,7 +631,7 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const data = structuredClone(s.data)
     const v = data.vehicles.find((y) => y.id === m.vehicleId)!
     v.blocks = v.blocks.filter((b) => b.ref !== id)
-    const at = demoNowStamp('admin')
+    const at = demoNowStamp()
     activity(data, at, { category: 'Fleet', title: 'Maintenance done', body: `${v.name} · ${m.type}. The van is back in service.`, link: '/admin/maintenance' })
     set({ data, maintenance: s.maintenance.map((y) => (y.id === id ? { ...y, status: 'Done', doneAt: at, doneNote: note.trim() || 'Completed.' } : y)) })
     return OK
@@ -618,7 +645,7 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const data = structuredClone(s.data)
     const v = data.vehicles.find((y) => y.id === m.vehicleId)!
     v.blocks = v.blocks.filter((b) => b.ref !== id)
-    activity(data, demoNowStamp('admin'), { category: 'Fleet', title: 'Maintenance cancelled', body: `${v.name} · ${m.type}.`, link: '/admin/maintenance' })
+    activity(data, demoNowStamp(), { category: 'Fleet', title: 'Maintenance cancelled', body: `${v.name} · ${m.type}.`, link: '/admin/maintenance' })
     set({ data, maintenance: s.maintenance.filter((y) => y.id !== id) })
     return OK
   },
@@ -643,7 +670,7 @@ export const useAdmin = create<AdminState>((set, get) => ({
       while (data.services.some((v) => v.id === sid)) sid = `${base}${++n}`
       data.services.push({ id: sid, type: 'tour', unit: 'person', tint: ['#1D3A7A', '#C8282F'], interests: dest.interests, ...clean })
     }
-    activity(data, demoNowStamp('admin'), { category: 'Bookings', title: id ? 'Tour package updated' : 'Tour package added', body: `${clean.name} · ${peso(clean.price)} per person.`, link: `/admin/packages?id=${sid}` })
+    activity(data, demoNowStamp(), { category: 'Bookings', title: id ? 'Tour package updated' : 'Tour package added', body: `${clean.name} · ${peso(clean.price)} per person.`, link: `/admin/packages?id=${sid}` })
     set({ data })
     return OK
   },
@@ -655,7 +682,7 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const svc = data.services.find((v) => v.id === id)
     if (!svc) return fail('Package not found.')
     svc.inactive = !active
-    activity(data, demoNowStamp('admin'), { category: 'Bookings', title: active ? 'Tour package reactivated' : 'Tour package deactivated', body: svc.name, link: `/admin/packages?id=${id}` })
+    activity(data, demoNowStamp(), { category: 'Bookings', title: active ? 'Tour package reactivated' : 'Tour package deactivated', body: svc.name, link: `/admin/packages?id=${id}` })
     set({ data })
     return OK
   },
@@ -670,7 +697,7 @@ export const useAdmin = create<AdminState>((set, get) => ({
     if (!svc) return fail('Package not found.')
     data.services = data.services.filter((v) => v.id !== id)
     data.departures = data.departures.filter((d) => d.serviceId !== id)
-    activity(data, demoNowStamp('admin'), { category: 'Bookings', title: 'Tour package deleted', body: svc.name, link: '/admin/packages' })
+    activity(data, demoNowStamp(), { category: 'Bookings', title: 'Tour package deleted', body: svc.name, link: '/admin/packages' })
     set({ data })
     return OK
   },
@@ -694,7 +721,7 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const data = structuredClone(get().data)
     const r = data.customRequests.find((x) => x.id === id)
     if (!r || !r.proposal || (r.status !== 'Proposal ready' && r.status !== 'Under review')) return fail('There is no sent proposal to revise.')
-    const at = demoNowStamp('admin')
+    const at = demoNowStamp()
     if (r.status === 'Proposal ready') {
       r.status = 'Under review'
       r.events.push({ at, status: 'Under review', note: 'Staff are revising the proposal.' })
@@ -704,7 +731,10 @@ export const useAdmin = create<AdminState>((set, get) => ({
     return OK
   },
 
-  reset: () => set(initial()),
+  reset: () => {
+    writeSession({ staffId: null })
+    set(initial(true))
+  },
 }))
 
 const isAdmin = (s: { accounts: StaffAccount[]; userId: string | null }) => s.accounts.find((a) => a.id === s.userId)?.role === 'Admin'

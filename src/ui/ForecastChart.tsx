@@ -1,9 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import type { Forecast } from '../domain/forecast'
 
-// Sales outlook chart. Past months are a solid line; the months ahead fan out like a market chart: a dashed
-// expected path, with optimistic and conservative paths trailing above and below it inside shaded ranges.
-// One hue (Road Navy) at different strengths, one axis, end labels on every line, and a table view below.
+// Sales outlook chart. Four kinds of line, told apart by colour, stroke and the legend:
+//   actual months      Road Navy, solid
+//   forecast           Heritage Red, dashed, with its likely range as a light red band and dotted edges
+//   same month a year earlier, for comparison   neutral grey, thin and dotted
+// One axis, end labels on the forecast lines, hover and keyboard read-outs, and a table view below.
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const monthLabel = (m: string, withYear = false) => `${MONTHS[Number(m.slice(5, 7)) - 1]}${withYear ? ` ${m.slice(0, 4)}` : ''}`
@@ -61,6 +63,11 @@ export function ForecastChart({ forecast, metric, format, axisFormat, height = 3
     return `${line(upper)}${lower.map(([i, v]) => `L${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('')}Z`
   }
 
+  // Same month one year earlier, wherever the history has it.
+  const monthAt = (i: number) => (i <= last ? history[i].month : points[i - last - 1].month)
+  const yearBefore = (m: string) => history.find((h) => h.month === `${Number(m.slice(0, 4)) - 1}${m.slice(4)}`)?.[metric]
+  const comparison = Array.from({ length: n }, (_, i) => [i, yearBefore(monthAt(i))] as const).filter((p): p is readonly [number, number] => p[1] !== undefined)
+
   const end = points[points.length - 1]
   const endLabels = [
     { key: 'Optimistic', v: end.high80, cls: 'fill-ink-2' },
@@ -108,18 +115,21 @@ export function ForecastChart({ forecast, metric, format, axisFormat, height = 3
         ))}
 
         {/* Forecast zone, behind everything else. */}
-        <rect x={x(last)} y={pad.t} width={x(n - 1) - x(last)} height={ih} className="fill-brand-50" opacity={0.6} />
+        <rect x={x(last)} y={pad.t} width={x(n - 1) - x(last)} height={ih} className="fill-surface-muted" opacity={0.7} />
         <line x1={x(last)} x2={x(last)} y1={pad.t - 6} y2={pad.t + ih} className="stroke-ink-3" strokeWidth={1} strokeDasharray="2 3" />
         <text x={x(last) + 6} y={pad.t + 4} className="fill-ink-2 text-[11px] font-semibold">
           Forecast →
         </text>
 
-        <path d={band((p) => p.low95, (p) => p.high95)} className="fill-brand-600" opacity={0.08} />
-        <path d={band((p) => p.low80, (p) => p.high80)} className="fill-brand-600" opacity={0.12} />
+        <path d={band((p) => p.low95, (p) => p.high95)} className="fill-sili" opacity={0.06} />
+        <path d={band((p) => p.low80, (p) => p.high80)} className="fill-sili" opacity={0.12} />
 
-        <path d={line(ahead((p) => p.high80))} fill="none" className="stroke-brand-400" strokeWidth={1.5} strokeDasharray="1 4" strokeLinecap="round" />
-        <path d={line(ahead((p) => p.low80))} fill="none" className="stroke-brand-400" strokeWidth={1.5} strokeDasharray="1 4" strokeLinecap="round" />
-        <path d={line(ahead((p) => p.value))} fill="none" className="stroke-brand-600" strokeWidth={2} strokeDasharray="6 5" strokeLinecap="round" />
+        {comparison.length > 1 && (
+          <path d={line(comparison.map(([i, v]) => [i, v]))} fill="none" className="stroke-ink-3" strokeWidth={1.5} strokeDasharray="2 3" strokeLinecap="round" opacity={0.9} />
+        )}
+        <path d={line(ahead((p) => p.high80))} fill="none" className="stroke-sili" strokeWidth={1.25} strokeDasharray="1 4" strokeLinecap="round" opacity={0.7} />
+        <path d={line(ahead((p) => p.low80))} fill="none" className="stroke-sili" strokeWidth={1.25} strokeDasharray="1 4" strokeLinecap="round" opacity={0.7} />
+        <path d={line(ahead((p) => p.value))} fill="none" className="stroke-sili" strokeWidth={2} strokeDasharray="6 5" strokeLinecap="round" />
         <path d={line(actual.map((v, i) => [i, v]))} fill="none" className="stroke-brand-600" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
         <circle cx={x(last)} cy={y(actual[last])} r={4.5} className="fill-brand-600 stroke-surface" strokeWidth={2} />
 
@@ -153,9 +163,9 @@ export function ForecastChart({ forecast, metric, format, axisFormat, height = 3
               <circle cx={x(hover)} cy={y(actual[hover])} r={5} className="fill-brand-600 stroke-surface" strokeWidth={2} />
             ) : (
               <>
-                <circle cx={x(hover)} cy={y(points[hover - last - 1].high80)} r={3.5} className="fill-brand-400 stroke-surface" strokeWidth={1.5} />
-                <circle cx={x(hover)} cy={y(points[hover - last - 1].low80)} r={3.5} className="fill-brand-400 stroke-surface" strokeWidth={1.5} />
-                <circle cx={x(hover)} cy={y(points[hover - last - 1].value)} r={5} className="fill-surface stroke-brand-600" strokeWidth={2} />
+                <circle cx={x(hover)} cy={y(points[hover - last - 1].high80)} r={3.5} className="fill-sili/60 stroke-surface" strokeWidth={1.5} />
+                <circle cx={x(hover)} cy={y(points[hover - last - 1].low80)} r={3.5} className="fill-sili/60 stroke-surface" strokeWidth={1.5} />
+                <circle cx={x(hover)} cy={y(points[hover - last - 1].value)} r={5} className="fill-surface stroke-sili" strokeWidth={2} />
               </>
             )}
           </g>
@@ -186,6 +196,7 @@ export function ForecastChart({ forecast, metric, format, axisFormat, height = 3
               </p>
             </>
           )}
+          {yearBefore(tip.month) !== undefined && <p className="text-white/75 tnum">A year earlier: {format(yearBefore(tip.month)!)}</p>}
         </div>
       )}
 
@@ -198,23 +209,19 @@ export function ForecastChart({ forecast, metric, format, axisFormat, height = 3
         </li>
         <li className="flex items-center gap-2">
           <svg width="22" height="8" aria-hidden>
-            <line x1="1" x2="21" y1="4" y2="4" className="stroke-brand-600" strokeWidth="2" strokeDasharray="6 5" strokeLinecap="round" />
+            <line x1="1" x2="21" y1="4" y2="4" className="stroke-sili" strokeWidth="2" strokeDasharray="6 5" strokeLinecap="round" />
           </svg>
-          Expected
+          Forecast (expected)
+        </li>
+        <li className="flex items-center gap-2">
+          <span className="relative h-2.5 w-5 rounded-sm bg-sili/15" aria-hidden />
+          Likely range (8 in 10), dotted edges
         </li>
         <li className="flex items-center gap-2">
           <svg width="22" height="8" aria-hidden>
-            <line x1="1" x2="21" y1="4" y2="4" className="stroke-brand-400" strokeWidth="1.5" strokeDasharray="1 4" strokeLinecap="round" />
+            <line x1="1" x2="21" y1="4" y2="4" className="stroke-ink-3" strokeWidth="1.5" strokeDasharray="2 3" strokeLinecap="round" />
           </svg>
-          Optimistic and conservative paths
-        </li>
-        <li className="flex items-center gap-2">
-          <span className="h-2.5 w-5 rounded-sm bg-brand-600/20" aria-hidden />
-          Likely range (8 in 10)
-        </li>
-        <li className="flex items-center gap-2">
-          <span className="h-2.5 w-5 rounded-sm bg-brand-600/8 ring-1 ring-brand-600/10" aria-hidden />
-          Wider range (19 in 20)
+          Same month last year
         </li>
       </ul>
     </div>
