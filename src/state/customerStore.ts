@@ -4,7 +4,7 @@ import { peso } from '../lib/format'
 import type { AssistantAnswer } from '../domain/assistant'
 import { recKey, type RecKind } from '../domain/recommend'
 import {
-  canTransition, draftCustomProposal, PROPOSAL_VALID_DAYS, proposalExpired, rentalEndDate, rentalEstimate, validateCustom, validateRental,
+  canTransition, draftCustomProposal, PROPOSAL_VALID_DAYS, proposalExpired, rentalEndDate, rentalEstimate, requestDestination, validateCustom, validateRental,
   type CustomInput, type RentalInput,
 } from '../domain/requests'
 import { departureAvailability, payableOptions, tourTotal } from '../domain/rules'
@@ -12,7 +12,7 @@ import { publicName, reviewableTrips, validateReview } from '../domain/reviews'
 import { customerSeed } from '../seed/derive'
 import type {
   AppNotification, Booking, CustomRequest, Customer, Dataset, Inquiry, Interest, Payment, PaymentMethod, PaymentType, RentalRequest,
-  RentalTripType, RequestStatus, Review, SavedItem, TravelPreferences,
+  RentalTripType, RequestStatus, Review, SavedItem, TravelPreferences, TripPace,
 } from '../seed/types'
 import { nextId } from './ids'
 
@@ -21,8 +21,10 @@ import { nextId } from './ids'
 
 export interface Account {
   email: string
+  /** Empty for accounts created through Google sign-in. */
   password: string
   customerId: string
+  googleSub?: string
 }
 
 export const DEMO_CUSTOMER = { email: 'maria.santos@example.com', password: 'Maria2026!' }
@@ -40,10 +42,29 @@ export interface NewBooking {
   notes?: string
 }
 
+/** A stop in the trip planner. Suggested stops can be switched off without losing their place. */
+export interface PlanStop {
+  name: string
+  on: boolean
+  /** Added by the customer rather than taken from the suggested trip. */
+  own?: boolean
+}
+
+/** The stops a plan sends: chosen suggested stops and own stops, or only own stops when building from scratch. */
+export const planStops = (f: Pick<CustomForm, 'plan' | 'planMode'>) =>
+  f.plan.filter((x) => x.on && x.name.trim() && (f.planMode === 'suggested' || x.own)).map((x) => x.name.trim())
+
 export interface CustomForm extends CustomInput {
   flexibility: CustomRequest['flexibility']
   interests: Interest[]
   requests: string
+  pickupCity: string
+  pickupLandmark: string
+  planMode: 'suggested' | 'scratch'
+  plan: PlanStop[]
+  /** The destination the suggested stops were taken from, so changing destination offers a fresh template. */
+  planFor?: string
+  pace: TripPace
 }
 
 export interface RentalForm extends RentalInput {
@@ -88,6 +109,8 @@ interface CustomerState {
   startSession: (customerId: string) => void
   logout: () => void
   signup: (input: { name: string; email: string; mobile: string; password: string }) => Result
+  /** Signs in with a Google profile from Google Identity Services, creating the demo account on first use. */
+  googleSignIn: (profile: { email: string; name: string; sub: string }) => Result
   updateProfile: (input: { name: string; mobile: string }) => Result
   createBooking: (input: NewBooking) => Result<Booking>
   submitPayment: (input: NewPayment) => Result<Payment>
@@ -182,7 +205,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
 
   login: (email, password) => {
     const acct = get().accounts.find((a) => a.email.toLowerCase() === email.trim().toLowerCase())
-    if (!acct || acct.password !== password) return { ok: false, error: 'Email or password is incorrect.' }
+    if (!acct || !acct.password || acct.password !== password) return { ok: false, error: 'Email or password is incorrect.' }
     get().startSession(acct.customerId)
     return { ok: true, value: undefined }
   },
@@ -198,6 +221,22 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     const customer: Customer = { id: nextId(data, 'customer'), name: name.trim(), email: email.trim(), mobile: mobile.trim(), city: '', registered: DEMO_TODAY, origin: 'local' }
     data.customers.push(customer)
     set({ data, accounts: [...s.accounts, { email: customer.email, password, customerId: customer.id }] })
+    get().startSession(customer.id)
+    return { ok: true, value: undefined }
+  },
+
+  googleSignIn: ({ email, name, sub }) => {
+    const s = get()
+    const existing = s.accounts.find((a) => a.email.toLowerCase() === email.toLowerCase())
+    if (existing) {
+      get().startSession(existing.customerId)
+      return { ok: true, value: undefined }
+    }
+    const data = structuredClone(s.data)
+    const customer: Customer = { id: nextId(data, 'customer'), name: name.trim() || email, email, mobile: '', city: '', registered: DEMO_TODAY, origin: 'local' }
+    data.customers.push(customer)
+    // No password: this account can only sign in through Google.
+    set({ data, accounts: [...s.accounts, { email, password: '', customerId: customer.id, googleSub: sub }] })
     get().startSession(customer.id)
     return { ok: true, value: undefined }
   },
@@ -332,13 +371,13 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     const errors = validateCustom(f)
     if (Object.keys(errors).length) return fail(Object.values(errors)[0])
     const data = structuredClone(s.data)
-    const dest = data.destinations.find((x) => x.id === f.destinationId)
-    if (!dest) return fail('Choose a destination.')
+    const dest = requestDestination(data, f)
     const at = demoNowStamp()
     const r: CustomRequest = {
-      id: nextId(data, 'customRequest'), customerId: s.customerId, destinationId: dest.id, startDate: f.startDate, endDate: f.endDate,
+      id: nextId(data, 'customRequest'), customerId: s.customerId, destinationId: dest.id, destinationName: dest.id ? undefined : dest.name, startDate: f.startDate, endDate: f.endDate,
       flexibility: f.flexibility, groupSize: f.groupSize, pickup: f.pickup.trim(), budgetMin: f.budgetMin, budgetMax: f.budgetMax,
       interests: [...f.interests], requests: f.requests.trim(), contactName: f.contactName.trim(), contactMobile: f.contactMobile.trim(),
+      planMode: f.planMode, stops: planStops(f), pace: f.pace,
       status: 'Submitted', createdAt: at, events: [{ at, status: 'Submitted', note: 'Request received. Staff will review it and prepare a proposal.' }], origin: 'local',
     }
     data.customRequests.push(r)
@@ -384,7 +423,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     if (r.status !== 'Proposal ready' || !r.proposal) return fail('There is no proposal to accept right now.')
     if (proposalExpired(r.proposal.validUntil)) return fail('This proposal has expired. Request changes to get an updated one.')
     const p = r.proposal
-    const dest = data.destinations.find((x) => x.id === r.destinationId)!
+    const dest = requestDestination(data, r)
     const at = demoNowStamp()
     const booking: Booking = {
       id: nextId(data, 'booking'), customerId: r.customerId, serviceId: 'SVC-CUSTOM', startDate: p.startDate, endDate: p.endDate, pax: p.groupSize,
@@ -462,7 +501,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     if (kind === 'custom') {
       const r = data.customRequests.find((x) => x.id === requestId && x.customerId === s.customerId)
       if (!r) return fail('Request not found.')
-      const dest = data.destinations.find((x) => x.id === r.destinationId)!
+      const dest = requestDestination(data, r)
       if (r.status === 'Submitted') {
         r.status = 'Under review'
         r.events.push({ at, status: 'Under review', note: `Staff are checking lodging and guides in ${dest.name}. (Simulated)` })

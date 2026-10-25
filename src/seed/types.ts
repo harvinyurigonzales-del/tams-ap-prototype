@@ -13,11 +13,32 @@ export type PaymentSummary = 'Unpaid' | 'Partially paid' | 'Fully paid'
 export type Interest = 'Nature' | 'Beach' | 'Heritage' | 'Food' | 'Adventure' | 'Cool weather' | 'Family' | 'Relaxation' | 'Photography'
 export const INTERESTS: Interest[] = ['Nature', 'Beach', 'Heritage', 'Food', 'Adventure', 'Cool weather', 'Family', 'Relaxation', 'Photography']
 
-/** A bundled image. `illustration` marks generated artwork; `supplied` marks images from the team's design files. */
+/** Where a bundled photo came from, for attribution. */
+export interface PhotoCredit {
+  title: string
+  author: string
+  license: string
+  licenseUrl?: string
+  /** The file's page on Wikimedia Commons. */
+  /** Page of the original; missing for photos supplied by the team whose source is still to be confirmed. */
+  source?: string
+}
+
+/**
+ * A bundled image. `photo` is a real photo of the place; `vehicle` is a representative photo of the van model,
+ * not the agency's own van; `illustration` marks generated artwork; `supplied` marks images from the team's files.
+ */
 export interface ImageRef {
   src: string
   alt: string
-  kind: 'supplied' | 'illustration'
+  kind: 'photo' | 'vehicle' | 'supplied' | 'illustration'
+  /** Responsive sources, smallest first. */
+  srcset?: { w: number; src: string }[]
+  /** Tiny blurred preview shown while the photo loads. */
+  lqip?: string
+  /** CSS object-position, so crops keep the subject. */
+  focus?: string
+  credit?: PhotoCredit
 }
 
 export interface Destination {
@@ -239,10 +260,20 @@ export interface Proposal {
   sentAt: string
 }
 
+export type TripPace = 'Relaxed' | 'Balanced' | 'Packed'
+
 export interface CustomRequest {
   id: string
   customerId: string
+  /** Catalog destination, or '' when the customer typed a place we do not list yet (see destinationName). */
   destinationId: string
+  /** The place as the customer typed it, when it is not in the catalog. */
+  destinationName?: string
+  /** How the plan was made: from the destination's suggested trip, or from scratch. */
+  planMode?: 'suggested' | 'scratch'
+  /** Stops in the order the customer wants them. Staff check feasibility and timing. */
+  stops?: string[]
+  pace?: TripPace
   startDate: string
   endDate: string
   flexibility: 'Exact dates' | '± 3 days' | 'Any weekend this month'

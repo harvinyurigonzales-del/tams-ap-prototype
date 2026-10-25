@@ -1,4 +1,5 @@
 import { CalendarRange, Clock, MapPin, MessageCircleQuestion, PencilRuler, Sun } from 'lucide-react'
+import type { PhotoCredit } from '../../seed/types'
 import { useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { catalogTours } from '../../domain/recommend'
@@ -27,7 +28,7 @@ export function DestinationDetails() {
     <div>
       <BackLink to="/app/explore?view=destinations" label="Destinations" />
       <div className="relative">
-        <Picture image={dest.image} eager className="aspect-[4/3] rounded-[28px] sm:aspect-[16/8] lg:aspect-[21/8]" labelAt="tr" />
+        <Picture image={dest.image} eager sizes="(min-width: 1180px) 1132px, 100vw" className="aspect-[4/3] rounded-[28px] sm:aspect-[16/8] lg:aspect-[21/8]" labelAt="tr" />
         <div className="pointer-events-none absolute inset-0 rounded-[28px] bg-gradient-to-t from-black/75 via-black/15 to-transparent" aria-hidden />
         <div className="absolute inset-x-0 bottom-0 p-5 text-white sm:p-8">
           <p className="flex items-center gap-1 text-sm text-white/90">
@@ -36,6 +37,7 @@ export function DestinationDetails() {
           <h1 className="mt-1 type-hero text-[40px] sm:text-[60px] lg:text-[80px]">{dest.name}</h1>
         </div>
       </div>
+      {dest.image.credit && <PhotoCreditLine credit={dest.image.credit} />}
       <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_360px]">
         <div className="min-w-0">
           <div className="flex items-start justify-between gap-4">
@@ -95,5 +97,29 @@ export function DestinationDetails() {
         </aside>
       </div>
     </div>
+  )
+}
+
+/** One-line attribution under a photo, linking to its source page and license. */
+export function PhotoCreditLine({ credit }: { credit: PhotoCredit }) {
+  return (
+    <p className="mt-2 text-right text-xs text-ink-3">
+      Photo: {credit.author},{' '}
+      {credit.licenseUrl ? (
+        <a href={credit.licenseUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-ink-2">
+          {credit.license}
+        </a>
+      ) : (
+        credit.license
+      )}
+      {credit.source && (
+        <>
+          , via{' '}
+          <a href={credit.source} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-ink-2">
+            Wikimedia Commons
+          </a>
+        </>
+      )}
+    </p>
   )
 }

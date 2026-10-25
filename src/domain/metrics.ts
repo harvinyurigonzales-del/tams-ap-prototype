@@ -1,4 +1,5 @@
 import { addDays, dateOf, DEMO_TODAY, weekday } from '../lib/demoClock'
+import { monthLabel } from '../lib/format'
 import type { BookingStatus, Dataset, PaymentMethod } from '../seed/types'
 import { assignableTargets, money, seatUse } from './rules'
 
@@ -10,10 +11,16 @@ export interface Period {
   label: string
 }
 
-export const PERIODS: Period[] = [
-  { from: '2026-10-01', to: '2026-10-31', label: 'October 2026' },
-  { from: '2026-09-01', to: '2026-09-30', label: 'September 2026' },
-]
+function monthPeriod(year: number, month0: number): Period {
+  const y = year + Math.floor(month0 / 12)
+  const m = ((month0 % 12) + 12) % 12
+  const from = `${y}-${String(m + 1).padStart(2, '0')}-01`
+  const next = m === 11 ? `${y + 1}-01-01` : `${y}-${String(m + 2).padStart(2, '0')}-01`
+  return { from, to: addDays(next, -1), label: monthLabel(y, m) }
+}
+
+/** This month and last month, from the demo date. */
+export const PERIODS: Period[] = [0, -1].map((n) => monthPeriod(+DEMO_TODAY.slice(0, 4), +DEMO_TODAY.slice(5, 7) - 1 + n))
 
 const inPeriod = (day: string, p: Period) => day >= p.from && day <= p.to
 const STATUSES: BookingStatus[] = ['Pending', 'Confirmed', 'Completed', 'Cancelled']

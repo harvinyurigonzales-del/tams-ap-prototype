@@ -1,5 +1,5 @@
-import { ArrowUpRight, CalendarDays, ChevronLeft, ChevronRight, CircleDollarSign, MapPin, MessageCircle, Search, SlidersHorizontal, Sparkles, Ticket, Users, X } from 'lucide-react'
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { ArrowUpRight, CalendarDays, ChevronLeft, ChevronRight, CircleDollarSign, MapPin, MessageCircle, Search, Pause, Play, SlidersHorizontal, Sparkles, Ticket, Users, X } from 'lucide-react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { availableMoods, departureInWindow } from '../../domain/moods'
 import { recommendationRows, type RecItem, type RecRow } from '../../domain/recommend'
@@ -11,12 +11,25 @@ import { useAssistant } from '../../state/assistant'
 import { myRecords, useCustomer, useMe } from '../../state/customerStore'
 import { useUi } from '../../state/ui'
 import type { Dataset, Service } from '../../seed/types'
-import { Picture } from '../../ui/Picture'
+import { LoopCarousel } from '../../ui/LoopCarousel'
+import { Picture, srcSetOf } from '../../ui/Picture'
 import { DestinationCard, destinationOf, pickupPlace, PriceTag, SaveButton, TourCard } from './Cards'
 import { TRIP_DESK } from './Trips'
 
-/** The hero photograph. Swap this one object when the agency supplies its own photography. */
-const HERO = { destinationId: 'DST-BANAUE', caption: 'Rice terraces of Banaue, Ifugao' }
+/** Hero slideshow: a broad tour of the catalog, north to south. Swap entries when the agency has its own photos. */
+const HERO_SLIDES = [
+  { destinationId: 'DST-BANAUE', caption: 'Rice terraces of Banaue, Ifugao' },
+  { destinationId: 'DST-VIGAN', caption: 'Calle Crisologo, Vigan' },
+  { destinationId: 'DST-PAGUDPUD', caption: 'Bangui windmills, Ilocos Norte' },
+  { destinationId: 'DST-HUNDRED', caption: 'Hundred Islands, Pangasinan' },
+  { destinationId: 'DST-BAGUIO', caption: 'Baguio, the Summer Capital' },
+  { destinationId: 'DST-PINATUBO', caption: 'Mt. Pinatubo crater lake, Tarlac' },
+  { destinationId: 'DST-ZAMBALES', caption: 'Anawangin Cove, Zambales' },
+  { destinationId: 'DST-INTRAMUROS', caption: 'Intramuros, Manila' },
+  { destinationId: 'DST-TAGAYTAY', caption: 'Taal Volcano from Tagaytay' },
+  { destinationId: 'DST-BATANGAS', caption: 'Beaches of Batangas' },
+]
+const SLIDE_MS = 3000
 /** The destination given the large storytelling feature: a real photo and a scheduled joiner tour. */
 const SPOTLIGHT_DESTINATION = 'DST-BAGUIO'
 
@@ -38,7 +51,7 @@ export function Home() {
   return (
     <div>
       <Hero greeting={me ? `Hello, ${me.name.split(' ')[0]}` : undefined} />
-      <div className="relative z-10 mx-auto -mt-[92px] max-w-[1180px] px-4 sm:px-6 md:-mt-[52px]">
+      <div data-hero-hold className="relative z-10 mx-auto -mt-[92px] max-w-[1180px] px-4 sm:px-6 md:-mt-[52px]">
         <TripSearch />
       </div>
 
@@ -87,16 +100,80 @@ export function Home() {
 
 function Hero({ greeting }: { greeting?: string }) {
   const data = useCustomer((s) => s.data)
-  const dest = data.destinations.find((x) => x.id === HERO.destinationId)!
-  const hasTour = tours(data).some((s) => s.destinationId === dest.id)
-  return (
-    <section className="relative isolate h-[min(92svh,860px)] min-h-[620px] overflow-hidden bg-charcoal text-white" aria-labelledby="hero-title">
-      <Picture image={dest.image} eager label={false} className="absolute inset-0 -z-10 bg-charcoal" imgClassName="scale-[1.02] saturate-[0.9] contrast-[1.04]" />
-      {/* Two controlled washes: one under the navigation, one under the headline. */}
-      <div className="absolute inset-x-0 top-0 -z-10 h-48 bg-gradient-to-b from-black/55 to-transparent" aria-hidden />
-      <div className="absolute inset-0 -z-10 bg-gradient-to-t from-[#14110c]/90 via-[#14110c]/35 to-transparent" aria-hidden />
+  const slides = HERO_SLIDES.map((h) => ({ ...h, dest: data.destinations.find((x) => x.id === h.destinationId)! })).filter((h) => h.dest)
+  const reduced = usePrefersReducedMotion()
+  const [index, setIndex] = useState(0)
+  const [playing, setPlaying] = useState(!reduced)
+  const [held, setHeld] = useState(false) // pointer or focus on the controls or search
+  const [hidden, setHidden] = useState(false)
+  const [loaded, setLoaded] = useState<Set<number>>(() => new Set())
+  const [announce, setAnnounce] = useState(false)
+  // The photo on screen: it only changes once the chosen slide has loaded, so there is never an empty frame.
+  const [visible, setVisible] = useState(0)
+  const n = slides.length
+  const next = (index + 1) % n
+  const running = playing && !held && !hidden && n > 1
 
-      <div className="mx-auto flex h-full max-w-[1280px] flex-col justify-end px-4 pb-[132px] sm:px-6 md:pb-[112px]">
+  useEffect(() => setPlaying(!reduced), [reduced])
+  useEffect(() => {
+    if (loaded.has(index)) setVisible(index)
+  }, [index, loaded])
+  useEffect(() => {
+    const onVis = () => setHidden(document.hidden)
+    document.addEventListener('visibilitychange', onVis)
+    // Typing in the trip search below the hero also pauses the slideshow.
+    const onFocus = (e: FocusEvent) => setHeld(!!(e.target as Element | null)?.closest?.('[data-hero-hold]'))
+    document.addEventListener('focusin', onFocus)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      document.removeEventListener('focusin', onFocus)
+    }
+  }, [])
+  useEffect(() => {
+    // Advance only once the next photo is ready, so a slow network never fades to an empty frame.
+    if (!running || !loaded.has(next)) return
+    const t = window.setTimeout(() => setIndex(next), SLIDE_MS)
+    return () => window.clearTimeout(t)
+  }, [running, next, loaded, index])
+
+  const go = (i: number) => {
+    setAnnounce(true)
+    setIndex(((i % n) + n) % n)
+  }
+  const slide = slides[index]
+  const hasTour = (id: string) => tours(data).some((s) => s.destinationId === id)
+  // Mount the current, next and previous photos (and any already seen), so the next one is preloaded.
+  const mounted = (i: number) => i === index || i === next || i === (index - 1 + n) % n || loaded.has(i)
+
+  return (
+    <section className="relative isolate h-[min(92svh,860px)] min-h-[620px] overflow-hidden bg-charcoal text-white" aria-labelledby="hero-title" aria-roledescription="slideshow">
+      <div className="absolute inset-0 -z-10" aria-hidden>
+        {slides.map((h, i) =>
+          mounted(i) ? (
+            <img
+              key={h.destinationId}
+              src={h.dest.image.src}
+              srcSet={srcSetOf(h.dest.image)}
+              sizes="100vw"
+              alt=""
+              loading={i === 0 ? 'eager' : 'lazy'}
+              fetchPriority={i === 0 ? 'high' : 'low'}
+              decoding="async"
+              onLoad={() => setLoaded((s) => (s.has(i) ? s : new Set(s).add(i)))}
+              style={{ objectPosition: h.dest.image.focus }}
+              className={`absolute inset-0 size-full object-cover saturate-[0.92] transition-opacity ease-out ${reduced ? 'duration-0' : 'duration-[900ms]'} ${
+                i === visible ? 'opacity-100' : 'opacity-0'
+              }`}
+            />
+          ) : null,
+        )}
+      </div>
+      {/* Two controlled washes keep the headline and navigation readable on every photo. */}
+      <div className="absolute inset-x-0 top-0 -z-10 h-48 bg-gradient-to-b from-black/60 to-transparent" aria-hidden />
+      <div className="absolute inset-0 -z-10 bg-gradient-to-t from-[#14110c]/92 via-[#14110c]/40 to-[#14110c]/5" aria-hidden />
+      <div className="absolute inset-y-0 left-0 -z-10 w-full bg-gradient-to-r from-[#14110c]/45 to-transparent md:w-2/3" aria-hidden />
+
+      <div className="mx-auto flex h-full max-w-[1280px] flex-col justify-end px-4 pb-[150px] sm:px-6 md:pb-[112px]">
         {greeting && <p className="tara-rise mb-3 text-sm font-semibold text-white/85">{greeting}</p>}
         <h1 id="hero-title" className="tara-rise type-hero max-w-[12ch] text-[50px] sm:text-[78px] lg:text-[104px]">
           Tara, alis muna tayo.
@@ -114,16 +191,61 @@ function Hero({ greeting }: { greeting?: string }) {
         </div>
       </div>
 
-      <p className="absolute right-4 bottom-[118px] hidden max-w-[260px] text-right text-xs text-white/80 sm:right-6 md:bottom-[100px] md:block">
-        <span className="font-semibold text-white">{HERO.caption}</span>
-        <br />
-        Representative photo.{' '}
-        <Link to={`/app/destinations/${dest.id}`} className="underline hover:text-white">
-          {hasTour ? `Tours to ${dest.name}` : 'No joiner tour here yet. Plan it as a custom trip.'}
-        </Link>
-      </p>
+      <div
+        data-hero-hold
+        onPointerEnter={() => setHeld(true)}
+        onPointerLeave={() => setHeld(document.activeElement?.closest('[data-hero-hold]') != null)}
+        className="absolute right-4 bottom-[112px] left-4 flex items-end justify-between gap-3 sm:right-6 sm:left-auto md:bottom-[84px]"
+      >
+        <p className="min-w-0 text-xs text-white/80 sm:max-w-[280px] sm:text-right" aria-live={announce ? 'polite' : 'off'}>
+          <span className="block truncate font-semibold text-white">{slide.caption}</span>
+          <Link key={slide.destinationId} to={`/app/destinations/${slide.dest.id}`} className="fade-in underline underline-offset-2 hover:text-white">
+            {hasTour(slide.dest.id) ? `See tours to ${slide.dest.name}` : `Plan a trip to ${slide.dest.name}`}
+          </Link>
+          {slide.dest.image.credit && <span className="block truncate text-[10px] text-white/60">Photo: {slide.dest.image.credit.author}</span>}
+        </p>
+        {n > 1 && (
+          <div className="flex shrink-0 items-center gap-1 rounded-full bg-black/35 p-1 ring-1 ring-white/15 backdrop-blur-md" role="group" aria-label="Slideshow controls">
+            <HeroButton label="Previous photo" onClick={() => go(index - 1)}>
+              <ChevronLeft className="size-4" aria-hidden />
+            </HeroButton>
+            <HeroButton label={playing ? 'Pause slideshow' : 'Play slideshow'} pressed={!playing} onClick={() => setPlaying((p) => !p)}>
+              {playing ? <Pause className="size-4" aria-hidden /> : <Play className="size-4" aria-hidden />}
+            </HeroButton>
+            <span className="px-1 text-[11px] font-semibold text-white/85 tnum" aria-label={`Photo ${index + 1} of ${n}`}>
+              {index + 1}/{n}
+            </span>
+            <HeroButton label="Next photo" onClick={() => go(index + 1)}>
+              <ChevronRight className="size-4" aria-hidden />
+            </HeroButton>
+          </div>
+        )}
+      </div>
+      {running && !reduced && (
+        <span key={index} className="hero-progress absolute inset-x-0 bottom-0 h-0.5 origin-left bg-white/70" style={{ animationDuration: `${SLIDE_MS}ms` }} aria-hidden />
+      )}
     </section>
   )
+}
+
+function HeroButton({ label, onClick, pressed, children }: { label: string; onClick: () => void; pressed?: boolean; children: ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} aria-label={label} aria-pressed={pressed} className="grid size-8 place-items-center rounded-full text-white/90 transition-colors hover:bg-white/15 hover:text-white">
+      {children}
+    </button>
+  )
+}
+
+function usePrefersReducedMotion() {
+  const query = '(prefers-reduced-motion: reduce)'
+  const [reduced, setReduced] = useState(() => typeof matchMedia !== 'undefined' && matchMedia(query).matches)
+  useEffect(() => {
+    const m = matchMedia(query)
+    const on = () => setReduced(m.matches)
+    m.addEventListener('change', on)
+    return () => m.removeEventListener('change', on)
+  }, [])
+  return reduced
 }
 
 /* ------------------------------------------------------------------ Search */
@@ -250,7 +372,7 @@ function FeatureTour({ service: s }: { service: Service }) {
   return (
     <article className="group relative mt-8 grid overflow-hidden rounded-[28px] bg-surface ring-1 ring-line lg:grid-cols-[1.35fr_1fr]">
       <div className="relative">
-        {dest && <Picture image={dest.image} className="aspect-[4/3] lg:aspect-auto lg:h-full" labelAt="bl" />}
+        {dest && <Picture image={dest.image} sizes="(min-width: 1024px) 50vw, 100vw" className="aspect-[4/3] lg:aspect-auto lg:h-full" labelAt="bl" />}
         {off > 0 && (
           <span className="absolute top-4 left-4 rounded-full bg-sili px-3 py-1.5 text-xs font-semibold text-white">
             {next.dep.promo!.label}: {peso(off)} off, book by {fmtDate(next.dep.promo!.bookBy, { year: false })}
@@ -357,7 +479,7 @@ function Spotlight() {
     <section className="mt-24 md:mt-32" aria-labelledby="spotlight">
       <div className="mx-auto max-w-[1280px] px-4 sm:px-6">
         <div className="relative grid lg:grid-cols-12">
-          <Picture image={dest.image} className="aspect-[4/3] rounded-[28px] lg:col-span-8 lg:col-start-1 lg:row-start-1 lg:aspect-auto lg:min-h-[640px]" labelAt="tl" />
+          <Picture image={dest.image} sizes="(min-width: 1024px) 66vw, 100vw" className="aspect-[4/3] rounded-[28px] lg:col-span-8 lg:col-start-1 lg:row-start-1 lg:aspect-auto lg:min-h-[640px]" labelAt="tl" />
           <div className="relative -mt-16 mx-3 rounded-[28px] bg-navy p-6 text-white shadow-pop sm:mx-8 sm:p-9 lg:col-span-5 lg:col-start-8 lg:row-start-1 lg:mx-0 lg:my-14 lg:self-center">
             <p className="text-sm font-semibold text-white/70">Konting layo, ibang mundo.</p>
             <h2 id="spotlight" className="mt-2 type-hero text-[46px] sm:text-[62px]">
@@ -508,69 +630,31 @@ function NeedsAttention() {
 
 /* ------------------------------------------------------------------ Recommendation rows */
 
-/** Accessible horizontal row: touch scroll on phones, previous/next buttons on larger screens, no autoplay. */
-export function Carousel({ title, id, children, count }: { title: string; id: string; children: ReactNode; count: number }) {
-  const ref = useRef<HTMLUListElement>(null)
-  const [edges, setEdges] = useState({ start: true, end: false })
-  const update = () => {
-    const el = ref.current
-    if (!el) return
-    setEdges({ start: el.scrollLeft <= 4, end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 4 })
-  }
-  useEffect(() => {
-    update()
-    window.addEventListener('resize', update)
-    return () => {
-      window.removeEventListener('resize', update)
-    }
-  }, [count])
-  const scroll = (dir: 1 | -1) => {
-    const el = ref.current
-    if (el) el.scrollBy({ left: dir * el.clientWidth * 0.9, behavior: 'smooth' })
-  }
-  return (
-    <section className="mt-16" aria-labelledby={`row-${id}`}>
-      <div className="mb-4 flex items-end justify-between gap-3">
-        <h2 id={`row-${id}`} className="type-head text-[26px] text-charcoal md:text-[30px]">
-          {title}
-        </h2>
-        <div className="hidden gap-1.5 md:flex">
-          <button onClick={() => scroll(-1)} disabled={edges.start} aria-label={`Previous items in ${title}`} className="rounded-full bg-surface p-2 text-ink-2 ring-1 ring-line hover:bg-sand disabled:opacity-30">
-            <ChevronLeft className="size-5" />
-          </button>
-          <button onClick={() => scroll(1)} disabled={edges.end} aria-label={`More items in ${title}`} className="rounded-full bg-surface p-2 text-ink-2 ring-1 ring-line hover:bg-sand disabled:opacity-30">
-            <ChevronRight className="size-5" />
-          </button>
-        </div>
-      </div>
-      <ul ref={ref} onScroll={update} className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth px-4 pb-2 sm:-mx-6 sm:px-6 md:mx-0 md:px-0">
-        {children}
-      </ul>
-    </section>
-  )
-}
-
 function RecCarousel({ row, onDismiss }: { row: RecRow; onDismiss: (i: RecItem, name: string) => void }) {
   const data = useCustomer((s) => s.data)
   return (
-    <Carousel title={row.title} id={row.id} count={row.items.length}>
-      {row.items.map((i) => {
-        const name = i.kind === 'tour' ? data.services.find((s) => s.id === i.id)!.name : data.destinations.find((x) => x.id === i.id)!.name
-        const footer = (
-          <button onClick={() => onDismiss(i, name)} className="inline-flex items-center gap-1 text-xs font-medium text-ink-3 hover:text-ink">
-            <X className="size-3.5" aria-hidden /> Not interested
-          </button>
-        )
-        return (
-          <li key={`${i.kind}:${i.id}`} className="w-[82%] shrink-0 snap-start sm:w-[46%] lg:w-[31.5%]">
-            {i.kind === 'tour' ? (
-              <TourCard service={data.services.find((s) => s.id === i.id)!} reason={i.reason} footer={footer} />
-            ) : (
-              <DestinationCard dest={data.destinations.find((x) => x.id === i.id)!} reason={i.reason} footer={footer} />
-            )}
-          </li>
-        )
-      })}
-    </Carousel>
+    <section className="mt-16" aria-labelledby={`row-${row.id}`}>
+      <h2 id={`row-${row.id}`} className="mb-4 type-head text-[26px] text-charcoal md:text-[30px]">
+        {row.title}
+      </h2>
+      <LoopCarousel
+        label={row.title}
+        items={row.items}
+        itemKey={(i) => `${i.kind}:${i.id}`}
+        renderItem={(i) => {
+          const name = i.kind === 'tour' ? data.services.find((s) => s.id === i.id)!.name : data.destinations.find((x) => x.id === i.id)!.name
+          const footer = (
+            <button onClick={() => onDismiss(i, name)} className="inline-flex items-center gap-1 text-xs font-medium text-ink-3 hover:text-ink">
+              <X className="size-3.5" aria-hidden /> Not interested
+            </button>
+          )
+          return i.kind === 'tour' ? (
+            <TourCard service={data.services.find((s) => s.id === i.id)!} reason={i.reason} footer={footer} />
+          ) : (
+            <DestinationCard dest={data.destinations.find((x) => x.id === i.id)!} reason={i.reason} footer={footer} />
+          )
+        }}
+      />
+    </section>
   )
 }

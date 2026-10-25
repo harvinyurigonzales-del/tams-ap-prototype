@@ -1,7 +1,7 @@
-import { ArrowRight, LayoutDashboard, Smartphone } from 'lucide-react'
+import { ArrowRight, Clock, LayoutDashboard, Smartphone } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { fmtDate } from '../lib/format'
-import { DEMO_TODAY } from '../lib/demoClock'
+import { CLOCK_SOURCE, DEMO_TODAY } from '../lib/demoClock'
 import { InstallButton } from '../pwa/InstallHelp'
 import { BrandMark } from '../ui/BrandMark'
 import { ResetDemoButton, useResetOnArrival } from './ResetDemo'
@@ -14,10 +14,17 @@ export function Start() {
       <main className="mx-auto max-w-4xl px-4 py-10 sm:py-16">
         <BrandMark />
         <h1 className="mt-8 font-display text-3xl leading-tight font-bold text-brand-900 sm:text-4xl">Booking Management System</h1>
-        <p className="mt-3 max-w-2xl text-ink-2">
-          A clickable prototype for TAMS AP Travel and Tours. Everything here is fictional sample data, and the clock is fixed at{' '}
-          <strong className="text-ink">{fmtDate(DEMO_TODAY, { weekday: true })}, 9:30 AM</strong> (Manila time).
-        </p>
+        <p className="mt-3 max-w-2xl text-ink-2">A clickable prototype for TAMS AP Travel and Tours. Everything here is fictional sample data.</p>
+        <div className="mt-4 flex max-w-2xl gap-3 rounded-2xl border border-line bg-surface px-4 py-3 text-sm">
+          <Clock className="mt-0.5 size-5 shrink-0 text-brand-600" aria-hidden />
+          <p className="text-ink-2">
+            <span className="font-semibold text-ink">Demo clock: {fmtDate(DEMO_TODAY, { weekday: true })}, 9:30 AM, Philippine time.</span>{' '}
+            {CLOCK_SOURCE === 'live'
+              ? 'The date is today’s date in Manila; the time of day is fixed so the demo always starts the same way.'
+              : 'This date is pinned for the presentation. Open the page with ?demo-date=today to go back to today’s date.'}{' '}
+            Sample departures, promos and history move with the date, so past trips are never offered for booking.
+          </p>
+        </div>
 
         <div className="mt-8 grid gap-4 sm:grid-cols-2">
           <DemoCard

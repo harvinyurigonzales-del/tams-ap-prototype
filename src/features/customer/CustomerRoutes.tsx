@@ -3,7 +3,7 @@ import { Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-r
 import { NotFound } from '../../app/NotFound'
 import { useCustomer } from '../../state/customerStore'
 import { Account, Notifications } from './Account'
-import { Login, Signup } from './Auth'
+import { ForgotPassword, Login, Signup } from './Auth'
 import { BookingForm, BookingReceived } from './Book'
 import { ChooseDate } from './ChooseDate'
 import { CustomRequestDetails, CustomRequestForm } from './Custom'
@@ -18,6 +18,7 @@ import { RentalLanding, RentalRequestDetails, RentalRequestForm } from './Rental
 import { ReviewsPage } from './Reviews'
 import { Saved } from './Saved'
 import { TourDetails } from './Tours'
+import { PhotoCredits } from './Credits'
 import { TripDetails, Trips } from './Trips'
 
 export function CustomerRoutes() {
@@ -25,6 +26,7 @@ export function CustomerRoutes() {
     <Routes>
       <Route path="login" element={<Bare><Login /></Bare>} />
       <Route path="signup" element={<Bare><Signup /></Bare>} />
+      <Route path="forgot" element={<Bare><ForgotPassword /></Bare>} />
       <Route element={<Shell />}>
         {/* Guests can browse everything here and fill in request forms; sending one asks them to log in. */}
         <Route index element={<Home />} />
@@ -38,6 +40,7 @@ export function CustomerRoutes() {
         <Route path="rental/request" element={<RentalRequestForm />} />
         <Route path="custom/new" element={<CustomRequestForm />} />
         <Route path="reviews" element={<ReviewsPage />} />
+        <Route path="credits" element={<PhotoCredits />} />
 
         {/* Old links from the first version of the prototype. */}
         <Route path="services" element={<Navigate to="/app/tours" replace />} />

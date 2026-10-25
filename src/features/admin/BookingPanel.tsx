@@ -1,3 +1,4 @@
+import { demoReceiptSrc } from '../../lib/receipt'
 import { CarFront, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -228,7 +229,11 @@ export function BookingPanel({ bookingId, onClose }: { bookingId: string; onClos
               <span>Reference</span>
               <span className="text-right text-ink">{proof.reference}</span>
             </div>
-            <img src="/sample-receipt.svg" alt="Sample receipt (fictional)" className="mx-auto max-h-[50vh] rounded-lg border border-line" />
+            <img
+              src={demoReceiptSrc({ method: proof.method, amount: proof.amount, reference: proof.reference, at: proof.submittedAt, note: proof.type === 'Full' ? 'Full payment' : proof.type })}
+              alt="Sample receipt (fictional)"
+              className="mx-auto max-h-[50vh] rounded-lg border border-line"
+            />
             <p className="text-center text-xs text-ink-3">Fictional sample receipt. Compare the amount and reference before verifying.</p>
           </div>
         )}

@@ -15,6 +15,7 @@ import { Picture } from '../../ui/Picture'
 import { RatingBadge, Stars } from '../../ui/Stars'
 import { destinationOf, PriceTag, SaveButton } from './Cards'
 import { BackLink } from './Explore'
+import { PhotoCreditLine } from './Destinations'
 import { ReviewCard } from './Reviews'
 import { departuresOf } from './select'
 
@@ -47,7 +48,7 @@ export function TourDetails() {
       <BackLink to="/app/explore" label="Explore" />
       <div className="relative">
         {dest ? (
-          <Picture image={dest.image} eager className="aspect-[4/3] rounded-[28px] sm:aspect-[16/8] lg:aspect-[21/8]" labelAt="tr" />
+          <Picture image={dest.image} eager sizes="(min-width: 1180px) 1132px, 100vw" className="aspect-[4/3] rounded-[28px] sm:aspect-[16/8] lg:aspect-[21/8]" labelAt="tr" />
         ) : (
           <div className="aspect-[16/8] rounded-[28px] bg-sand" />
         )}
@@ -65,6 +66,7 @@ export function TourDetails() {
           </a>
         </div>
       </div>
+      {dest?.image.credit && <PhotoCreditLine credit={dest.image.credit} />}
 
       <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_380px]">
         <div className="min-w-0">

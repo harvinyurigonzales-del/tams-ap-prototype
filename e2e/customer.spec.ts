@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 test('customer walkthrough C1–C10', async ({ page }) => {
   await page.goto('/')
@@ -47,11 +47,14 @@ test('customer walkthrough C1–C10', async ({ page }) => {
   await expect(page.getByText('BK-2026-0148')).toBeVisible()
 
   await page.getByRole('link', { name: 'Pay now' }).click()
-  // The demo helper fills a valid reference and the sample receipt, but never submits by itself.
-  await page.getByRole('button', { name: 'Fill test payment' }).click()
-  await expect(page.getByLabel('Reference number')).toHaveValue('DEMO 1009 8822')
-  await expect(page.getByText('sample-receipt.svg')).toBeVisible()
+  // The demo helper fills a GCash-shaped reference and a matching demo receipt, but never submits by itself.
+  await page.getByRole('button', { name: 'Use sample payment details' }).click()
+  await expect(page.getByLabel('Reference number')).toHaveValue(/^\d{4} \d{3} \d{6}$/)
+  await expect(page.getByText('demo-receipt.svg')).toBeVisible()
   await expect(page.getByRole('dialog')).toHaveCount(0)
+  // Switching method swaps the generated reference for one in that method's format.
+  await page.getByText('Maya', { exact: true }).click()
+  await expect(page.getByLabel('Reference number')).toHaveValue(/^MY/)
   await page.getByRole('button', { name: 'Submit payment' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Submit payment' }).click()
   await expect(page.getByRole('heading', { name: 'Payment submitted' })).toBeVisible()

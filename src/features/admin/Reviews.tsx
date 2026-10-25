@@ -2,6 +2,7 @@ import { Lightbulb, MessageSquareReply, Star } from 'lucide-react'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { needsReply as waiting, ratingOf, REPLY_WINDOW_DAYS } from '../../domain/reviews'
+import { DEMO_TODAY } from '../../lib/demoClock'
 import { fmtDate } from '../../lib/format'
 import { useAdmin } from '../../state/adminStore'
 import { useUi } from '../../state/ui'
@@ -37,7 +38,7 @@ export function AdminReviews() {
   const overall = ratingOf(all)
   const needsReply = all.filter(waiting)
   const withTips = all.filter((r) => r.suggestion)
-  const thisMonth = all.filter((r) => r.createdAt.startsWith('2026-10')).length
+  const thisMonth = all.filter((r) => r.createdAt.startsWith(DEMO_TODAY.slice(0, 7))).length
 
   const term = q.trim().toLowerCase()
   const rows = (tab === 'reply' ? needsReply : tab === 'tips' ? withTips : all).filter(

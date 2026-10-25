@@ -2,6 +2,7 @@ import { BusFront, CalendarDays, CheckSquare, ChevronRight, ClipboardList, Penci
 import { useState, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { canCancel, money, payableOptions } from '../../domain/rules'
+import { requestDestination } from '../../domain/requests'
 import { daysBetween, DEMO_TODAY } from '../../lib/demoClock'
 import { fmtDate, fmtRange, fmtStamp, fmtTime, peso } from '../../lib/format'
 import { myRecords, useCustomer } from '../../state/customerStore'
@@ -32,7 +33,7 @@ function bookingImage(d: Dataset, b: Booking) {
   const s = d.services.find((x) => x.id === b.serviceId)
   if (s?.destinationId) return d.destinations.find((x) => x.id === s.destinationId)?.image
   const cr = d.customRequests.find((r) => r.id === b.requestId)
-  if (cr) return d.destinations.find((x) => x.id === cr.destinationId)?.image
+  if (cr) return requestDestination(d, cr).image
   const vr = d.rentalRequests.find((r) => r.id === b.requestId)
   return d.vehicleCategories.find((c) => c.id === (vr?.categoryId ?? 'CAT-STD'))?.image
 }
@@ -60,7 +61,7 @@ export function Trips() {
           </button>
         ))}
       </div>
-      <div className="mt-5" role="tabpanel">
+      <div key={tab} className="fade-in mt-5" role="tabpanel">
         {tab === 'bookings' && <BookingList bookings={mine.bookings} />}
         {tab === 'custom' && (
           <RequestList
@@ -69,7 +70,7 @@ export function Trips() {
               .slice()
               .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
               .map((r) => {
-                const dest = data.destinations.find((x) => x.id === r.destinationId)!
+                const dest = requestDestination(data, r)
                 return {
                   id: r.id, to: `/app/custom/${r.id}`, image: dest.image, title: `${dest.name} custom trip`, sub: `${fmtRange(r.startDate, r.endDate)} · ${r.groupSize} people`,
                   badge: <RequestStatusBadge status={r.status} kind="custom" />, linked: r.bookingId,
@@ -126,7 +127,7 @@ function BookingList({ bookings }: { bookings: Booking[] }) {
                 return (
                   <li key={b.id}>
                     <Link to={`/app/trips/${b.id}`} className="flex items-center gap-4 rounded-2xl border border-line bg-surface p-3 shadow-card hover:border-brand-300">
-                      {img ? <Picture image={img} label={false} className="size-20 shrink-0 rounded-xl" /> : <span className="size-20 shrink-0 rounded-xl bg-brand-100" />}
+                      {img ? <Picture image={img} label={false} sizes="80px" className="size-20 shrink-0 rounded-xl" /> : <span className="size-20 shrink-0 rounded-xl bg-brand-100" />}
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-display font-semibold text-ink">{bookingTitle(b, s)}</p>
                         <p className="text-sm text-ink-2">
@@ -172,7 +173,7 @@ function RequestList({ rows, empty }: { rows: ReqRow[]; empty: ReactNode }) {
       {rows.map((r) => (
         <li key={r.id}>
           <Link to={r.to} className="flex items-center gap-4 rounded-2xl border border-line bg-surface p-3 shadow-card hover:border-brand-300">
-            <Picture image={r.image} label={false} className="size-20 shrink-0 rounded-xl" />
+            <Picture image={r.image} label={false} sizes="80px" className="size-20 shrink-0 rounded-xl" />
             <div className="min-w-0 flex-1">
               <p className="truncate font-display font-semibold text-ink">{r.title}</p>
               <p className="text-sm text-ink-2">

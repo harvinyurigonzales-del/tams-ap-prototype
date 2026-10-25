@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { bookingsPerWeek, dashboard, statusCounts } from '../../domain/metrics'
+import { bookingsPerWeek, dashboard, PERIODS, statusCounts } from '../../domain/metrics'
 import { money, shortRange } from '../../domain/rules'
 import { fmtDate, peso } from '../../lib/format'
 import { useAdmin } from '../../state/adminStore'
@@ -21,7 +21,7 @@ export function Dashboard() {
     <div>
       <PageHeader title="Magandang umaga, Admin" subtitle="Here is what needs attention today." />
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4 [&>*:first-child]:col-span-2 sm:[&>*:first-child]:col-span-1">
-        <Kpi emphasis label="Verified collections · October" value={peso(k.collections)} note="Payments verified this month" to="/admin/reports?tab=revenue" />
+        <Kpi emphasis label={`Verified collections · ${PERIODS[0].label.split(' ')[0]}`} value={peso(k.collections)} note="Payments verified this month" to="/admin/reports?tab=revenue" />
         <Kpi label="Payments to verify" value={k.toVerify} note={k.toVerify ? `${peso(k.toVerifyAmount)} submitted` : 'All caught up'} to="/admin/bookings?payment=Submitted" />
         <Kpi label="Outstanding balance" value={peso(k.outstanding)} note="Pending and confirmed bookings" to="/admin/bookings?tab=Confirmed" />
         <Kpi label="Needs van assignment" value={k.needsAssignment} note="Confirmed trips without a van" to="/admin/calendar" />
@@ -43,7 +43,7 @@ export function Dashboard() {
           <SectionTitle>Bookings by status</SectionTitle>
           <BarList title="Bookings by status" data={(['Pending', 'Confirmed', 'Completed', 'Cancelled'] as const).map((s) => ({ label: s, value: counts[s] }))} />
           <p className="mt-4 text-xs text-ink-3">
-            October travel: {k.bookings.total} bookings, {peso(k.bookings.value)} booking value
+            {PERIODS[0].label.split(' ')[0]} travel: {k.bookings.total} bookings, {peso(k.bookings.value)} booking value
           </p>
         </Card>
       </div>

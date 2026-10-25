@@ -1,7 +1,7 @@
 import { Inbox } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { requestStatusLabel } from '../../domain/requests'
+import { requestDestination, requestStatusLabel } from '../../domain/requests'
 import { fmtDate, fmtRange, fmtStamp, fmtTime, peso } from '../../lib/format'
 import { useAdmin } from '../../state/adminStore'
 import { useUi } from '../../state/ui'
@@ -19,7 +19,7 @@ type Kind = 'custom' | 'rental'
 
 const titleOf = (d: Dataset, kind: Kind, r: CustomRequest | RentalRequest) =>
   kind === 'custom'
-    ? `${d.destinations.find((x) => x.id === (r as CustomRequest).destinationId)?.name} custom trip`
+    ? `${requestDestination(d, r as CustomRequest).name} custom trip`
     : `${d.vehicleCategories.find((c) => c.id === (r as RentalRequest).categoryId)?.name} to ${(r as RentalRequest).dropoff}`
 
 export function AdminRequests() {
@@ -125,6 +125,12 @@ function RequestDetail({ kind, r }: { kind: Kind; r: CustomRequest | RentalReque
               Group of {custom.groupSize} · pickup {custom.pickup} · budget {peso(custom.budgetMin)}–{peso(custom.budgetMax)} per person
             </p>
             {custom.interests.length > 0 && <p>Interests: {custom.interests.join(', ')}</p>}
+            {!custom.destinationId && <p className="font-medium text-warn">Place not in the catalog: check that we can serve it before quoting.</p>}
+            {custom.stops && custom.stops.length > 0 && (
+              <p>
+                {custom.planMode === 'scratch' ? 'Planned from scratch' : 'From the suggested trip'}, {(custom.pace ?? 'Balanced').toLowerCase()} pace: {custom.stops.join(' → ')}
+              </p>
+            )}
           </>
         )}
         {rental && (

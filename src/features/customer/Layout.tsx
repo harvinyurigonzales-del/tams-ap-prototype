@@ -4,7 +4,7 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAssistant } from '../../state/assistant'
 import { useCustomer, useMe } from '../../state/customerStore'
 import { BrandMark } from '../../ui/BrandMark'
-import { AskTamsButton, AssistantMount } from './Assistant'
+import { AssistantMount } from './Assistant'
 
 /** Paths that belong to the Explore tab on mobile. */
 const EXPLORE_PATHS = ['/app/explore', '/app/tours', '/app/destinations', '/app/rental', '/app/custom/new', '/app/book']
@@ -68,8 +68,6 @@ export function Shell() {
               ))}
             </nav>
             <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
-              <AskTamsButton tone={tone} />
-              <span className={`mx-1 hidden h-6 w-px md:block ${home ? 'bg-white/30' : 'bg-line'}`} aria-hidden />
               <span className="flex items-center gap-0.5 sm:gap-1">
                 <IconLink tone={tone} to="/app/saved" label="Saved" icon={<Heart className="size-5" />} />
                 <IconLink tone={tone} to="/app/messages" label={`Messages${replies ? `, ${replies} new replies` : ''}`} icon={<MessageCircle className="size-5" />} count={replies} />
@@ -97,8 +95,20 @@ export function Shell() {
           </nav>
         </header>
         <main className={home ? '' : 'mx-auto max-w-[1180px] px-4 py-6 sm:px-6 md:py-10'}>
-          <Outlet />
+          {/* A short fade on each new page; same-page changes (filters, tabs) keep their own place. */}
+          <div key={pathname} className="page-in">
+            <Outlet />
+          </div>
         </main>
+        <footer className="mx-auto max-w-[1180px] px-4 pt-2 pb-8 text-xs text-ink-3 sm:px-6">
+          <p className="border-t border-line pt-4">
+            TAMS AP Travel and Tours prototype · sample data only. Photos are mostly from Wikimedia Commons, credited on the{' '}
+            <Link to="/app/credits" className="font-semibold text-ink-2 underline underline-offset-2 hover:text-ink">
+              Photo credits
+            </Link>{' '}
+            page.
+          </p>
+        </footer>
       </div>
       <AssistantMount />
       <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-ivory/97 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">

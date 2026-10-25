@@ -1,5 +1,5 @@
 import { addDays, daysBetween, DEMO_TODAY, overlaps } from '../lib/demoClock'
-import type { CustomRequest, Dataset, Destination, PriceLine, Proposal, RentalEstimate, RentalTripType, RequestStatus, VehicleCategory } from '../seed/types'
+import type { CustomRequest, Dataset, Destination, PriceLine, Proposal, RentalEstimate, RentalTripType, RequestStatus, TripPace, VehicleCategory } from '../seed/types'
 import { fmtDate } from '../lib/format'
 import { BOOKING_CUTOFF_DAYS } from './rules'
 
@@ -136,7 +136,43 @@ export const PROPOSAL_VALID_DAYS = 7
  * (two guests per room) per night, and a local guide and fees per person. Used for seeded proposals and the
  * "simulate staff proposal" demo control so every amount follows the same rule.
  */
-export function draftCustomProposal(r: Pick<CustomRequest, 'startDate' | 'endDate' | 'groupSize' | 'pickup'>, dest: Destination, sentAt: string): Proposal {
+/** Stops a day holds at each pace, used to lay out the requested stops across the trip days. */
+export const STOPS_PER_DAY: Record<TripPace, number> = { Relaxed: 2, Balanced: 3, Packed: 4 }
+
+/** Splits ordered stops into days at the chosen pace; extra stops share the last day (staff trim them). */
+export function stopsByDay(stops: string[], days: number, pace: TripPace = 'Balanced'): string[][] {
+  const per = STOPS_PER_DAY[pace]
+  const out = Array.from({ length: Math.max(1, days) }, (_, i) => stops.slice(i * per, (i + 1) * per))
+  const rest = stops.slice(out.length * per)
+  if (rest.length) out[out.length - 1].push(...rest)
+  return out
+}
+
+/** More stops than the trip's days can hold at the chosen pace. */
+export const tooManyStops = (stops: number, days: number, pace: TripPace = 'Balanced') => stops > Math.max(1, days) * STOPS_PER_DAY[pace]
+
+/**
+ * The destination of a custom request. A place the customer typed (not in our catalog) gets a plain stand-in so
+ * every screen can show it; staff confirm whether the agency can serve it.
+ */
+export function requestDestination(d: Dataset, r: Pick<CustomRequest, 'destinationId' | 'destinationName'>): Destination {
+  const found = d.destinations.find((x) => x.id === r.destinationId)
+  if (found) return found
+  const name = r.destinationName?.trim() || 'Custom destination'
+  return {
+    id: '', name, province: 'Location to be confirmed', summary: 'A place you suggested. Staff confirm whether we can take you there.', overview: '',
+    highlights: [], interests: [], bestMonths: '', travelTime: 'travel time to be confirmed', suggestedDays: 1,
+    image: { src: '/images/destinations/custom-place.svg', alt: `${name}, a place you suggested`, kind: 'illustration' },
+  }
+}
+
+/**
+ * Sample proposal the simulated staff prepare for a custom request: private van with driver per day, rooms
+ * (two guests per room) per night, and a local guide and fees per person. Used for seeded proposals and the
+ * "simulate staff proposal" demo control so every amount follows the same rule. The itinerary follows the
+ * customer's chosen stops when they gave some, otherwise the destination's highlights.
+ */
+export function draftCustomProposal(r: Pick<CustomRequest, 'startDate' | 'endDate' | 'groupSize' | 'pickup' | 'stops' | 'pace'>, dest: Destination, sentAt: string): Proposal {
   const days = daysBetween(r.startDate, r.endDate) + 1
   const nights = days - 1
   const vans = Math.ceil(r.groupSize / 12)
@@ -144,13 +180,23 @@ export function draftCustomProposal(r: Pick<CustomRequest, 'startDate' | 'endDat
   const lines = [line(`Private van with driver and fuel${vans > 1 ? ` (${vans} vans)` : ''}`, CUSTOM_VAN_RATE * vans, days, 'day')]
   if (nights > 0) lines.push(line(`Hotel, ${rooms} ${rooms === 1 ? 'room' : 'rooms'} (twin sharing)`, CUSTOM_ROOM_RATE * rooms, nights, 'night'))
   lines.push(line('Local guide, environmental and entrance fees', CUSTOM_GUIDE_FEE, r.groupSize, 'person'))
-  const itinerary = Array.from({ length: days }, (_, i) =>
-    i === 0
-      ? `Day 1: Pickup at ${r.pickup}, travel to ${dest.name} (${dest.travelTime}), ${dest.highlights[0]}`
-      : i === days - 1
-        ? `Day ${i + 1}: ${dest.highlights[Math.min(i, dest.highlights.length - 1)]}, return trip in the afternoon`
-        : `Day ${i + 1}: ${dest.highlights[Math.min(i, dest.highlights.length - 1)]} with your local guide`,
-  )
+  const travel = dest.id ? `${dest.name} (${dest.travelTime})` : dest.name
+  const planned = r.stops?.length ? stopsByDay(r.stops, days, r.pace) : undefined
+  const itinerary = planned
+    ? planned.map((stops, i) => {
+        const what = stops.length ? stops.join(', ') : 'Free time'
+        if (days === 1) return `Day 1: Pickup at ${r.pickup}, travel to ${travel}, ${what}, return trip in the afternoon`
+        if (i === 0) return `Day 1: Pickup at ${r.pickup}, travel to ${travel}, ${what}`
+        return i === days - 1 ? `Day ${i + 1}: ${what}, return trip in the afternoon` : `Day ${i + 1}: ${what}`
+      })
+    : Array.from({ length: days }, (_, i) => {
+        const h = dest.highlights[Math.min(i, dest.highlights.length - 1)] ?? 'Sightseeing with your local guide'
+        return i === 0
+          ? `Day 1: Pickup at ${r.pickup}, travel to ${travel}, ${h}`
+          : i === days - 1
+            ? `Day ${i + 1}: ${h}, return trip in the afternoon`
+            : `Day ${i + 1}: ${h} with your local guide`
+      })
   return {
     title: `${dest.name} custom trip`,
     startDate: r.startDate,
@@ -170,6 +216,7 @@ export const proposalExpired = (validUntil: string, today = DEMO_TODAY) => valid
 
 export interface CustomInput {
   destinationId: string
+  destinationName?: string
   startDate: string
   endDate: string
   groupSize: number
@@ -184,7 +231,7 @@ export const MAX_GROUP = 24
 
 export function validateCustom(f: CustomInput, today = DEMO_TODAY): Record<string, string> {
   const e: Record<string, string> = {}
-  if (!f.destinationId) e.destinationId = 'Choose a destination.'
+  if (!f.destinationId && (f.destinationName ?? '').trim().length < 3) e.destinationId = 'Choose a destination or type the place you want to visit.'
   const earliest = addDays(today, 7)
   if (!f.startDate) e.startDate = 'Choose a start date.'
   else if (f.startDate < earliest) e.startDate = `Custom trips need at least a week to plan. The earliest start date is ${fmtDate(earliest, { weekday: true })}.`

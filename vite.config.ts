@@ -38,6 +38,14 @@ export default defineConfig({
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/sw\.js$/, /^\/manifest\.webmanifest$/, /^\/workbox-/],
         cleanupOutdatedCaches: true,
+        // Photos are large, so they are not precached: each one is cached the first time it is shown.
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.pathname.startsWith('/images/photos/'),
+            handler: 'CacheFirst',
+            options: { cacheName: 'photos', expiration: { maxEntries: 120, maxAgeSeconds: 60 * 60 * 24 * 30 }, cacheableResponse: { statuses: [0, 200] } },
+          },
+        ],
       },
     }),
   ],

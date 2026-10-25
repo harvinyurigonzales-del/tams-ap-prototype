@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from './fixtures'
 
 // Customer revision journeys. In-app navigation only: a full page load resets the in-memory demo.
 
@@ -17,16 +17,25 @@ test('guest plans a custom trip from a destination, logs in, and tracks it to a 
   await nav(page).getByRole('link', { name: 'Explore' }).click()
   await page.getByRole('button', { name: /^Destinations/ }).click()
   await page.getByRole('link', { name: 'Sagada', exact: true }).click()
-  await expect(page.getByText('No open dates')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Sagada', level: 1 })).toBeVisible()
   await page.getByRole('link', { name: /Plan a custom trip here/ }).click()
-  await expect(page.getByLabel('Destination')).toHaveValue('DST-SAGADA')
-  await page.getByLabel('Pickup city or landmark').fill('Malolos, Bulacan')
+  await expect(page.getByRole('combobox', { name: 'Destination' })).toHaveValue('Sagada')
+  await expect(page.getByRole('checkbox', { name: 'Kiltepan sunrise' })).toBeChecked()
+  await page.getByRole('combobox', { name: 'Pickup city' }).fill('Malol')
+  await page.getByRole('option', { name: /Malolos/ }).click()
+  await page.getByRole('combobox', { name: 'Pickup landmark' }).click()
+  await page.getByRole('option', { name: /Barasoain Church/ }).click()
+  await page.getByRole('button', { name: 'Move Kiltepan sunrise down' }).click()
+  await page.getByRole('combobox', { name: 'Add your own stop' }).fill('Sagada Pottery')
+  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(page.getByRole('checkbox', { name: /Sagada Pottery/ })).toBeChecked()
   await page.getByLabel('Contact person').fill('Maria Santos')
   await page.getByLabel('Contact mobile').fill('0900 555 0101')
   await page.getByRole('button', { name: 'Log in to send request' }).click()
   await page.getByRole('button', { name: 'Use demo account' }).click()
   // Back on the form with the answers kept.
-  await expect(page.getByLabel('Pickup city or landmark')).toHaveValue('Malolos, Bulacan')
+  await expect(page.getByRole('combobox', { name: 'Pickup landmark' })).toHaveValue('Barasoain Church')
+  await expect(page.getByRole('checkbox', { name: /Sagada Pottery/ })).toBeChecked()
   await page.getByRole('button', { name: 'Send request' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Send request' }).click()
   await expect(page.getByText('CR-2026-0013 · custom trip request')).toBeVisible()
