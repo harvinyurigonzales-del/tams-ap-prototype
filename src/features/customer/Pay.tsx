@@ -1,14 +1,17 @@
-import { CheckCircle2, ClipboardCheck, FileImage, Upload, X } from 'lucide-react'
+import { CheckCircle2, Eye, FileImage, Upload, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { money, payableOptions } from '../../domain/rules'
 import { fmtDate, peso } from '../../lib/format'
-import { useCustomer } from '../../state/customerStore'
+import { DEMO_NOW } from '../../lib/demoClock'
+import { demoReceiptSrc, sampleReference } from '../../lib/receipt'
+import { useCustomer, useMe } from '../../state/customerStore'
 import type { Payment, PaymentMethod, PaymentType } from '../../seed/types'
 import { SampleTag, StatusBadge } from '../../ui/Badge'
 import { Button, LinkButton } from '../../ui/Button'
 import { Card, Row } from '../../ui/Card'
-import { ConfirmDialog } from '../../ui/Dialog'
+import { ConfirmDialog, Dialog } from '../../ui/Dialog'
+import { SampleFill } from '../../ui/SampleFill'
 import { TextField } from '../../ui/Field'
 import { EmptyState } from '../../ui/EmptyState'
 import { bookingTitle } from './Book'
@@ -40,6 +43,10 @@ export function Pay() {
   const [errors, setErrors] = useState({ reference: '', proof: '' })
   const [confirm, setConfirm] = useState(false)
   const [done, setDone] = useState<Payment | null>(null)
+  // The last reference the demo helper generated, so switching method can swap it for one in the right shape.
+  const [sampleRef, setSampleRef] = useState('')
+  const [viewReceipt, setViewReceipt] = useState(false)
+  const me = useMe()
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => () => {
@@ -75,12 +82,24 @@ export function Pay() {
     if (!errs.reference && !errs.proof) setConfirm(true)
   }
 
-  // Demo helper: fills the form with values that pass validation, but never submits on its own.
-  const fillTest = () => {
-    setReference('DEMO 1009 8822')
-    setProof({ kind: 'sample', name: 'sample-receipt.svg' })
+  // Demo helper: a reference in the chosen method's format plus a fictional receipt drawn from the same details.
+  // It never submits on its own; the customer still reviews and confirms.
+  const fillSample = (keepReference = false) => {
+    const ref = keepReference && reference.trim() ? reference : sampleReference(method)
+    setReference(ref)
+    setSampleRef(ref)
+    setProof({ kind: 'sample', name: 'demo-receipt.svg' })
     setErrors({ reference: '', proof: '' })
   }
+  const changeMethod = (k: Exclude<PaymentMethod, 'Cash'>) => {
+    setMethod(k)
+    if (sampleRef && reference === sampleRef) {
+      const ref = sampleReference(k)
+      setReference(ref)
+      setSampleRef(ref)
+    }
+  }
+  const receipt = demoReceiptSrc({ method, amount: chosen.amount, reference: reference.trim() || '(enter reference)', at: DEMO_NOW, note: chosen.type === 'Full' ? 'Full payment' : chosen.type, from: me?.mobile })
 
   return (
     <div>
@@ -94,21 +113,20 @@ export function Pay() {
       )}
       <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_360px]">
         <Card className="space-y-6 p-5">
-          <div className="flex flex-col gap-3 rounded-xl border border-dashed border-line-strong bg-surface-muted px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-ink-2">
-              <span className="font-semibold text-ink">Trying the demo?</span> Fill in a sample reference number and the sample receipt. You still review it before anything is submitted.
-            </p>
-            <Button variant="secondary" icon={<ClipboardCheck className="size-4" aria-hidden />} onClick={fillTest} className="shrink-0">
-              Fill test payment
-            </Button>
-          </div>
+          <SampleFill
+            dirty={!!reference || !!proof}
+            label="Use sample payment details"
+            what={`a sample ${method} reference and a matching demo receipt`}
+            onFill={() => fillSample()}
+            onClear={() => (setReference(''), setSampleRef(''), setProof(null), setErrors({ reference: '', proof: '' }))}
+          />
 
           <fieldset>
             <legend className="mb-2 text-sm font-medium text-ink">Payment method</legend>
             <div className="grid grid-cols-3 gap-2">
               {METHODS.map((k) => (
                 <label key={k} className={`cursor-pointer rounded-xl border px-3 py-3 text-center text-sm font-semibold ${method === k ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-line text-ink-2 hover:border-brand-300'}`}>
-                  <input type="radio" name="method" value={k} checked={method === k} onChange={() => setMethod(k)} className="sr-only" />
+                  <input type="radio" name="method" value={k} checked={method === k} onChange={() => changeMethod(k)} className="sr-only" />
                   {PAYEE[k].label}
                 </label>
               ))}
@@ -155,7 +173,9 @@ export function Pay() {
             {proof ? (
               <div className="flex items-center gap-3 rounded-xl border border-line p-3">
                 {proof.kind === 'sample' ? (
-                  <img src="/sample-receipt.svg" alt="Sample receipt" className="h-16 w-12 rounded border border-line object-cover" />
+                  <button type="button" onClick={() => setViewReceipt(true)} className="shrink-0 rounded focus-visible:outline-2" aria-label="View demo receipt">
+                    <img src={receipt} alt="" className="h-16 w-12 rounded border border-line object-cover object-top" />
+                  </button>
                 ) : proof.url ? (
                   <img src={proof.url} alt="Your receipt preview" className="h-16 w-12 rounded border border-line object-cover" />
                 ) : (
@@ -163,8 +183,13 @@ export function Pay() {
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-ink">{proof.name}</p>
-                  <p className="text-xs text-ink-2">{proof.kind === 'sample' ? 'Fictional receipt for the demo' : 'Preview only. The file stays on this device.'}</p>
+                  <p className="text-xs text-ink-2">{proof.kind === 'sample' ? 'Fictional demo receipt. It shows your method, amount and reference.' : 'Preview only. The file stays on this device.'}</p>
                 </div>
+                {proof.kind === 'sample' && (
+                  <Button size="sm" variant="ghost" icon={<Eye className="size-4" aria-hidden />} onClick={() => setViewReceipt(true)}>
+                    View
+                  </Button>
+                )}
                 <button onClick={() => setProof(null)} aria-label="Remove proof" className="rounded p-1 text-ink-3 hover:text-ink">
                   <X className="size-4" />
                 </button>
@@ -174,7 +199,7 @@ export function Pay() {
                 <Button variant="secondary" size="lg" icon={<Upload className="size-4" aria-hidden />} onClick={() => fileRef.current?.click()}>
                   Upload receipt
                 </Button>
-                <Button variant="secondary" size="lg" onClick={() => { setProof({ kind: 'sample', name: 'sample-receipt.svg' }); setErrors((e) => ({ ...e, proof: '' })) }}>
+                <Button variant="secondary" size="lg" onClick={() => fillSample(true)}>
                   Use sample receipt
                 </Button>
                 <input ref={fileRef} type="file" accept={TYPES.join(',')} className="hidden" onChange={(e) => onFile(e.target.files?.[0])} aria-label="Receipt file" />
@@ -209,6 +234,10 @@ export function Pay() {
           </Card>
         </aside>
       </div>
+      <Dialog open={viewReceipt} onClose={() => setViewReceipt(false)} title="Demo receipt">
+        <img src={receipt} alt={`Fictional ${method} receipt for ${peso(chosen.amount)}, reference ${reference.trim()}`} className="mx-auto max-h-[60vh] rounded-lg border border-line" />
+        <p className="mt-3 text-center text-xs text-ink-3">Made for the demo from the details on this form. No money was sent.</p>
+      </Dialog>
       <ConfirmDialog
         open={confirm}
         onClose={() => setConfirm(false)}

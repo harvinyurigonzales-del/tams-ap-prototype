@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 // Regression: an extension that makes window.scrollTo return a value used to crash client-side navigation.
 test('navigation survives a patched window.scrollTo', async ({ page }) => {

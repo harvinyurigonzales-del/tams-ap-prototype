@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { answerQuestion } from '../domain/assistant'
 import { bookingReport, dashboard, PERIODS, revenueReport, statusCounts } from '../domain/metrics'
-import { recKey, recommendationRows, type RecContext } from '../domain/recommend'
+import { bookableDeparture, recKey, recommendationRows, type RecContext } from '../domain/recommend'
 import { rentalEstimate, validateRental, type RentalInput } from '../domain/requests'
 import { adminSeed, customerSeed } from '../seed/derive'
 import type { Dataset } from '../seed/types'
@@ -142,7 +142,7 @@ describe('recommendations', () => {
     const rows = recommendationRows(d, maria())
     const all = keys(rows)
     expect(new Set(all).size).toBe(all.length)
-    expect(all).not.toContain('tour:SVC-SAG')
+    for (const k of all.filter((x) => x.startsWith('tour:'))) expect(bookableDeparture(d, k.slice(5))).toBeTruthy()
   })
 
   it('history rows only come from the customer’s own completed trips', () => {

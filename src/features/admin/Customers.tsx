@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { amountPaid, money, shortRange } from '../../domain/rules'
 import { fmtDate, peso } from '../../lib/format'
+import { DEMO_TODAY } from '../../lib/demoClock'
 import { useAdmin } from '../../state/adminStore'
 import { LocalTag, StatusBadge } from '../../ui/Badge'
 import { Card, Row } from '../../ui/Card'
@@ -32,7 +33,7 @@ export function Customers() {
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-3">
         <MiniKpi label="Customers" value={data.customers.length} />
         <MiniKpi label="Repeat customers" value={repeat} />
-        <MiniKpi label="Registered in 2026" value={data.customers.filter((x) => x.registered >= '2026-01-01').length} />
+        <MiniKpi label={`Registered in ${DEMO_TODAY.slice(0, 4)}`} value={data.customers.filter((x) => x.registered.startsWith(DEMO_TODAY.slice(0, 4))).length} />
       </div>
       <div className={`grid gap-6 ${c ? 'xl:grid-cols-[1fr_380px]' : ''}`}>
         <Card className="min-w-0">

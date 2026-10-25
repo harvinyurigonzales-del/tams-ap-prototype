@@ -9,7 +9,7 @@ import { BOOKING_CUTOFF_DAYS, money } from '../../domain/rules'
 import { addDays, DEMO_TODAY } from '../../lib/demoClock'
 import { fmtDate, fmtRange, fmtStamp, fmtTime, peso } from '../../lib/format'
 import { useCustomer, useMe, type RentalForm } from '../../state/customerStore'
-import type { RentalTripType, VehicleCategory } from '../../seed/types'
+import type { Dataset, RentalTripType, VehicleCategory } from '../../seed/types'
 import { SampleTag, StatusBadge } from '../../ui/Badge'
 import { Button, LinkButton } from '../../ui/Button'
 import { Card, Row } from '../../ui/Card'
@@ -17,6 +17,9 @@ import { ConfirmDialog } from '../../ui/Dialog'
 import { EmptyState } from '../../ui/EmptyState'
 import { Select, TextArea, TextField } from '../../ui/Field'
 import { Picture } from '../../ui/Picture'
+import { Combobox } from '../../ui/Combobox'
+import { SampleFill } from '../../ui/SampleFill'
+import { landmarkOptions } from '../../domain/places'
 import { mobileError, nameError } from '../../ui/validate'
 import { BackLink } from './Explore'
 import { AskAboutButton, DecisionActions, LinkedBooking, PriceLines, RequestStatusBadge, requestTimeline, SimulateStaff, WithdrawButton } from './Requests'
@@ -123,6 +126,24 @@ function blankRental(categoryId: string, name = '', mobile = ''): RentalForm {
   }
 }
 
+/** Sample answers for the demo helper: a same-day Bataan heritage trip on the first date the van is free. */
+function sampleRental(d: Dataset, categoryId: string, name?: string, mobile?: string): RentalForm {
+  const cat = d.vehicleCategories.find((c) => c.id === categoryId) ?? d.vehicleCategories[0]
+  const base: RentalForm = {
+    ...blankRental(cat.id, name, mobile), pickupArea: 'Bulacan', pickup: 'Malolos Cathedral, Malolos', destinationArea: 'Bataan', dropoff: 'Las Casas Filipinas de Acuzar, Bagac',
+    stops: ['Mt. Samat Shrine, Pilar'], startTime: '05:30', endTime: '17:30', passengers: Math.min(8, cat.seats),
+    requests: 'One child seat, please. We would like a lunch stop in Balanga.', contactName: name || 'Maria Santos', contactMobile: mobile || '0917 555 0123',
+  }
+  for (let i = 14; i < 75; i++) {
+    const f = { ...base, startDate: addDays(DEMO_TODAY, i), endDate: addDays(DEMO_TODAY, i) }
+    if (!Object.keys(validateRental(d, f)).length) return f
+  }
+  return base
+}
+
+const destinationChoices = (d: Dataset) =>
+  d.destinations.map((x) => ({ value: x.id, label: x.name, sub: x.province, keywords: x.province }))
+
 export function RentalRequestForm() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
@@ -144,6 +165,8 @@ export function RentalRequestForm() {
   const live = validateRental(data, f)
   const timingOk = !live.startDate && !live.endDate && !live.endTime && !live.startTime
   const estimate = cat && timingOk ? rentalEstimate(cat, { ...f, endDate: rentalEndDate(f) }) : undefined
+
+  const dirty = !!f.pickup || !!f.dropoff || !!f.destinationArea || f.stops.some(Boolean) || !!f.requests
 
   const submit = () => {
     const e = validateRental(data, f)
@@ -170,6 +193,12 @@ export function RentalRequestForm() {
       <p className="mt-1 max-w-2xl text-sm text-ink-2">You’ll see an estimate as you fill this in. Staff confirm the final quote; a request does not reserve a van.</p>
       <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_340px]">
         <Card className="space-y-5 p-5">
+          <SampleFill
+            dirty={dirty}
+            what="a sample Bataan day trip"
+            onFill={() => (setF(sampleRental(data, f.categoryId, me?.name, me?.mobile)), setErrors({}))}
+            onClear={() => (setF(blankRental(f.categoryId, me?.name, me?.mobile)), setErrors({}))}
+          />
           <fieldset>
             <legend className="mb-2 text-sm font-medium text-ink">Vehicle</legend>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -206,7 +235,20 @@ export function RentalRequestForm() {
                 <option key={a}>{a}</option>
               ))}
             </Select>
-            <TextField label="Pickup address or landmark" value={f.pickup} onChange={(e) => upd({ pickup: e.target.value })} error={errors.pickup} placeholder="e.g. Malolos Cathedral" />
+            <Combobox
+              label="Pickup address or landmark"
+              value={f.pickup}
+              onChange={(pickup) => upd({ pickup })}
+              onPick={(o) => {
+                const [landmark, city] = o.value.split('|')
+                upd({ pickup: `${landmark}, ${city}` })
+              }}
+              options={landmarkOptions('', f.pickupArea)}
+              error={errors.pickup}
+              placeholder="Search or type an address"
+              hint="Staff confirm the exact pickup spot with you."
+              freeTextNote="We'll use the address you typed."
+            />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Select label="Destination province" value={f.destinationArea} onChange={(e) => upd({ destinationArea: e.target.value })} error={errors.destinationArea}>
@@ -216,7 +258,19 @@ export function RentalRequestForm() {
               ))}
               <option>{OUTSIDE_AREA}</option>
             </Select>
-            <TextField label={f.tripType === 'One-way' ? 'Drop-off point' : 'Main destination'} value={f.dropoff} onChange={(e) => upd({ dropoff: e.target.value })} error={errors.dropoff} placeholder="e.g. Morong, Bataan" />
+            <Combobox
+              label={f.tripType === 'One-way' ? 'Drop-off point' : 'Main destination'}
+              value={f.dropoff}
+              onChange={(dropoff) => upd({ dropoff })}
+              onPick={(o) => {
+                const dest = data.destinations.find((x) => x.id === o.value)
+                if (dest) upd({ dropoff: `${dest.name}, ${dest.province}`, ...(DESTINATION_AREAS.includes(dest.province) ? { destinationArea: dest.province } : {}) })
+              }}
+              options={destinationChoices(data)}
+              error={errors.dropoff}
+              placeholder="e.g. Morong, Bataan"
+              freeTextNote="We'll use the place you typed."
+            />
           </div>
           <div>
             <p className="mb-1.5 text-sm font-medium text-ink">Stops along the way (optional)</p>

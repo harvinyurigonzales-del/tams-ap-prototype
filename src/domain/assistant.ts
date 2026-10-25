@@ -2,7 +2,7 @@ import { DEMO_TODAY } from '../lib/demoClock'
 import { fmtDate, fmtRange, fmtTime, peso } from '../lib/format'
 import type { Dataset, Destination, Service } from '../seed/types'
 import { bookableDeparture, catalogTours, fromPrice } from './recommend'
-import { requestStatusLabel } from './requests'
+import { requestDestination, requestStatusLabel } from './requests'
 import { BALANCE_DUE_DAYS_BEFORE, BOOKING_CUTOFF_DAYS, DOWN_PAYMENT_RATE, departureAvailability, money } from './rules'
 
 // "Ask TAMS" demo assistant. It is not an AI model: questions are matched to a fixed list of intents by
@@ -295,7 +295,7 @@ function personalAnswer(d: Dataset, customerId: string | null, ref: string | und
     }
     const c = customs.find((x) => x.id === target)
     if (c) {
-      const dest = d.destinations.find((x) => x.id === c.destinationId)!
+      const dest = requestDestination(d, c)
       const extra = c.status === 'Proposal ready' && c.proposal ? ` The proposal total is ${peso(c.proposal.total)}, valid until ${fmtDate(c.proposal.validUntil, { year: false })}.` : c.bookingId ? ` It became booking ${c.bookingId}.` : ''
       return { intent: 'personal', text: `${c.id} (${dest.name} custom trip): status ${c.status}.${extra}`, links: [{ label: `Open ${c.id}`, to: `/app/custom/${c.id}` }] }
     }

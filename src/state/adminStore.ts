@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { demoNowStamp } from '../lib/demoClock'
 import { peso } from '../lib/format'
-import { canTransition, draftCustomProposal, PROPOSAL_VALID_DAYS } from '../domain/requests'
+import { canTransition, draftCustomProposal, PROPOSAL_VALID_DAYS, requestDestination } from '../domain/requests'
 import { assignableTargets, canCancel, canConfirm, driverConflict, shortRange, vehicleConflict } from '../domain/rules'
 import { addDays } from '../lib/demoClock'
 import { adminSeed } from '../seed/derive'
@@ -237,7 +237,7 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const validUntil = addDays(at.slice(0, 10), PROPOSAL_VALID_DAYS)
     if (kind === 'custom') {
       const c = r as CustomRequest
-      const dest = data.destinations.find((x) => x.id === c.destinationId)!
+      const dest = requestDestination(data, c)
       c.proposal = { ...(c.draftProposal ?? draftCustomProposal(c, dest, at)), sentAt: at, validUntil }
       c.draftProposal = undefined
     } else {

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Clock, MapPin, Tag } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock, MapPin, Minus, Plus, Tag } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { BOOKING_CUTOFF_DAYS, promoFor, shortRange } from '../../domain/rules'
@@ -24,6 +24,12 @@ export function ChooseDate() {
   const firstMonth = (selected ?? deps.find((d) => d.avail.state === 'open') ?? deps[0])?.dep.startDate.slice(0, 7) ?? DEMO_TODAY.slice(0, 7)
   const [month, setMonth] = useState(firstMonth)
   const [hint, setHint] = useState('')
+  const pax = Math.max(1, Math.min(selected?.avail.left ?? 12, Number(params.get('pax')) || 1))
+  const setPax = (n: number) => {
+    const next = new URLSearchParams(params)
+    next.set('pax', String(n))
+    setParams(next, { replace: true })
+  }
 
   if (!service) return <EmptyState title="Trip not found" action={<LinkButton to="/app">Back to Explore</LinkButton>} />
 
@@ -53,7 +59,7 @@ export function ChooseDate() {
       return
     }
     setHint('')
-    setParams({ d: d.dep.id }, { replace: true })
+    setParams({ d: d.dep.id, ...(params.get('pax') ? { pax: params.get('pax')! } : {}) }, { replace: true })
   }
 
   return (
@@ -152,7 +158,27 @@ export function ChooseDate() {
                   <span className="text-sm text-ink-2">/person</span>
                   {promo > 0 && <span className="ml-2 text-sm text-ink-3 line-through tnum">{peso(service.price)}</span>}
                 </p>
-                <Button size="lg" full className="mt-4" onClick={() => navigate(`/app/book/${selected.dep.id}`)}>
+                <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-4">
+                  <span id="pax-label" className="text-sm font-medium text-ink">
+                    Travelers
+                  </span>
+                  <div className="flex items-center gap-2" role="group" aria-labelledby="pax-label">
+                    <button type="button" onClick={() => setPax(pax - 1)} disabled={pax <= 1} aria-label="Fewer travelers" className="grid size-9 place-items-center rounded-full ring-1 ring-line-strong hover:bg-brand-50 disabled:opacity-35">
+                      <Minus className="size-4" aria-hidden />
+                    </button>
+                    <output className="w-6 text-center font-semibold tnum" aria-live="polite">
+                      {pax}
+                    </output>
+                    <button type="button" onClick={() => setPax(pax + 1)} disabled={pax >= selected.avail.left} aria-label="More travelers" className="grid size-9 place-items-center rounded-full ring-1 ring-line-strong hover:bg-brand-50 disabled:opacity-35">
+                      <Plus className="size-4" aria-hidden />
+                    </button>
+                  </div>
+                </div>
+                <p className="mt-2 flex justify-between text-sm text-ink-2">
+                  <span>Total for {pax}</span>
+                  <span className="font-semibold text-ink tnum">{peso((service.price - promo) * pax)}</span>
+                </p>
+                <Button size="lg" full className="mt-4" onClick={() => navigate(`/app/book/${selected.dep.id}?pax=${pax}`)}>
                   Continue
                 </Button>
               </>

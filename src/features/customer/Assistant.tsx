@@ -2,42 +2,47 @@ import { MessageCircleQuestion, Send, UserRound, X } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { answerQuestion, ASSISTANT_DISCLOSURE, escalationDraft, suggestedQuestions, type AssistantContext } from '../../domain/assistant'
+import { requestDestination } from '../../domain/requests'
 import { useAssistant } from '../../state/assistant'
 import { myRecords, useCustomer } from '../../state/customerStore'
 import { Button, LinkButton } from '../../ui/Button'
 import { Select, TextArea, TextField } from '../../ui/Field'
 
 /**
- * "Ask TAMS" lives in the header next to Saved, Messages and Notifications, where people look for help,
- * instead of floating over the page. It opens the help panel anchored under the header.
+ * Ask TAMS: a branded launcher in the bottom-right corner that opens the help panel just above it. On phones it
+ * sits clear of the bottom navigation and the device safe area, and the panel opens as a sheet.
  */
-export function AskTamsButton({ tone }: { tone: 'overlay' | 'solid' }) {
+export function AssistantMount() {
+  const open = useAssistant((s) => s.open)
+  return (
+    <>
+      <AskTamsLauncher />
+      {open && <AssistantPanel />}
+    </>
+  )
+}
+
+function AskTamsLauncher() {
   const { open, openWith, close } = useAssistant()
+  const unanswered = useCustomer((s) => s.chat.length === 0)
   return (
     <button
       onClick={() => (open ? close() : openWith(useAssistant.getState().context))}
       aria-expanded={open}
       aria-haspopup="dialog"
-      aria-label="Ask TAMS"
+      aria-label={open ? 'Close Ask TAMS' : 'Ask TAMS'}
       title="Ask TAMS: quick answers about trips, prices and payments"
-      className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-full text-sm font-semibold transition-colors max-md:w-9 sm:h-10 sm:max-md:w-10 max-md:justify-center md:pr-4 md:pl-3 ${
-        tone === 'overlay'
-          ? 'text-white ring-white/45 hover:bg-white/15 md:ring-1'
-          : open
-            ? 'bg-brand-600 text-white'
-            : 'text-brand-700 ring-brand-200 hover:bg-brand-50 max-md:text-ink-2 md:ring-1'
+      className={`launcher fixed right-4 z-40 inline-flex h-12 items-center gap-2 rounded-full pr-4 pl-2 text-sm font-semibold text-white shadow-[0_10px_28px_-10px_rgba(14,29,61,0.65)] ring-1 ring-white/15 transition-[transform,background-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_32px_-10px_rgba(14,29,61,0.7)] focus-visible:outline-offset-4 active:translate-y-0 bottom-[calc(76px+env(safe-area-inset-bottom))] md:right-6 md:bottom-6 ${
+        open ? 'max-md:hidden bg-charcoal' : 'bg-navy hover:bg-brand-700'
       }`}
     >
-      <MessageCircleQuestion className="size-5" aria-hidden />
-      <span className="hidden md:inline">Ask TAMS</span>
+      <span className="relative grid size-8 place-items-center rounded-full bg-white/12">
+        {open ? <X className="size-[18px]" aria-hidden /> : <MessageCircleQuestion className="size-[18px]" aria-hidden />}
+        {!open && unanswered && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-sili ring-2 ring-navy" aria-hidden />}
+      </span>
+      {open ? 'Close' : 'Ask TAMS'}
     </button>
   )
-}
-
-/** Renders the help panel while it is open. */
-export function AssistantMount() {
-  const open = useAssistant((s) => s.open)
-  return open ? <AssistantPanel /> : null
 }
 
 function contextLabel(ctx: AssistantContext, names: (c: AssistantContext) => string | undefined) {
@@ -105,17 +110,17 @@ export function AssistantPanel() {
     <section
       role="dialog"
       aria-label="Ask TAMS assistant"
-      className="fixed inset-0 z-50 flex flex-col bg-surface md:inset-auto md:top-[76px] md:right-6 md:h-[min(620px,calc(100dvh-100px))] md:w-[400px] md:rounded-2xl md:border md:border-line md:shadow-pop"
+      className="sheet-in fixed inset-x-0 top-[max(16px,env(safe-area-inset-top))] bottom-0 z-50 flex flex-col overflow-hidden rounded-t-3xl bg-surface shadow-pop ring-1 ring-line md:inset-auto md:right-6 md:bottom-[88px] md:h-[min(600px,calc(100dvh-120px))] md:w-[392px] md:rounded-3xl"
     >
-      <header className="flex items-start gap-3 border-b border-line px-4 pt-[max(12px,env(safe-area-inset-top))] pb-3">
-        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-100 text-brand-700">
+      <header className="flex items-start gap-3 bg-navy px-4 pt-3 pb-3 text-white">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white/12 text-white">
           <MessageCircleQuestion className="size-5" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="type-head text-lg text-charcoal">Ask TAMS</h2>
-          <p className="text-xs text-ink-2">{ASSISTANT_DISCLOSURE}</p>
+          <h2 className="type-head text-lg">Ask TAMS</h2>
+          <p className="text-xs text-white/80">{ASSISTANT_DISCLOSURE}</p>
         </div>
-        <button onClick={close} className="rounded-lg p-1.5 text-ink-2 hover:bg-surface-muted" aria-label="Close assistant">
+        <button onClick={close} className="rounded-lg p-1.5 text-white/85 hover:bg-white/10" aria-label="Close assistant">
           <X className="size-5" />
         </button>
       </header>
@@ -139,11 +144,11 @@ export function AssistantPanel() {
             )}
             {chat.map((m) =>
               m.from === 'customer' ? (
-                <p key={m.id} className="ml-auto max-w-[85%] rounded-2xl bg-brand-600 px-4 py-2.5 text-sm whitespace-pre-line text-white">
+                <p key={m.id} className="fade-in ml-auto max-w-[85%] rounded-2xl bg-brand-600 px-4 py-2.5 text-sm whitespace-pre-line text-white">
                   {m.text}
                 </p>
               ) : (
-                <div key={m.id} className="max-w-[90%] rounded-2xl bg-surface-muted px-4 py-3 text-sm text-ink">
+                <div key={m.id} className="fade-in max-w-[90%] rounded-2xl bg-surface-muted px-4 py-3 text-sm text-ink">
                   <p className="whitespace-pre-line">{m.text}</p>
                   {m.answer?.links && (
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -189,9 +194,9 @@ export function AssistantPanel() {
       {mode === 'chat' && (
         <div className="border-t border-line px-3 pt-2 pb-[max(12px,env(safe-area-inset-bottom))]">
           {chips.length > 0 && (
-            <div className="mb-2 flex gap-2 overflow-x-auto pb-1" aria-label="Suggested questions">
+            <div className="mb-2 flex flex-wrap gap-1.5" role="group" aria-label="Suggested questions">
               {chips.map((c) => (
-                <button key={c} onClick={() => ask(c)} className="shrink-0 rounded-full border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100">
+                <button key={c} onClick={() => ask(c)} className="rounded-full border border-brand-200 bg-brand-50 px-3 py-1.5 text-left text-xs leading-snug font-semibold text-brand-700 transition-colors hover:bg-brand-100">
                   {c}
                 </button>
               ))}
@@ -237,7 +242,7 @@ function Escalate({ onCancel, onSent }: { onCancel: () => void; onSent: (id: str
   const mine = myRecords(data, customerId)
   const refs = [
     ...mine.bookings.filter((b) => b.status === 'Pending' || b.status === 'Confirmed').map((b) => ({ id: b.id, label: `${b.id} · ${b.label ?? data.services.find((s) => s.id === b.serviceId)?.name}` })),
-    ...mine.customRequests.filter((r) => r.status !== 'Closed').map((r) => ({ id: r.id, label: `${r.id} · ${data.destinations.find((x) => x.id === r.destinationId)?.name} custom trip` })),
+    ...mine.customRequests.filter((r) => r.status !== 'Closed').map((r) => ({ id: r.id, label: `${r.id} · ${requestDestination(data, r).name} custom trip` })),
     ...mine.rentalRequests.filter((r) => r.status !== 'Closed').map((r) => ({ id: r.id, label: `${r.id} · van rental to ${r.dropoff}` })),
   ]
   const [subject, setSubject] = useState(draft.subject === 'Question for staff' ? '' : draft.subject)

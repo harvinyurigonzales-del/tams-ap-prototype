@@ -1,6 +1,41 @@
-// Business logic never reads the real clock. The demo is fixed at Thu, Oct 8, 2026, 9:30 AM in Asia/Manila.
-export const DEMO_TODAY = '2026-10-08'
-export const DEMO_NOW = '2026-10-08T09:30:00+08:00'
+// One clock for the whole prototype. "Today" is the current date in Asia/Manila, read once when the app loads,
+// and every time of day is the demo's fixed 9:30 AM. Business logic never reads the real clock directly.
+//
+// The sample data was written around SEED_TODAY. At load it is moved forward in whole weeks (so weekend tours
+// stay on weekends) to sit just before today, which keeps departures, promos and history useful on any date.
+//
+// Presenters can pin the date with ?demo-date=YYYY-MM-DD (kept for the browser tab). Tests pin it the same way.
+
+export const SEED_TODAY = '2026-10-08'
+export const DEMO_TIME = '09:30'
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
+
+function manilaToday() {
+  // en-CA formats as YYYY-MM-DD.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+}
+
+function pinnedDate(): string | undefined {
+  const g = globalThis as { __TAMS_TODAY__?: string; location?: Location; sessionStorage?: Storage }
+  if (g.__TAMS_TODAY__ && ISO_DAY.test(g.__TAMS_TODAY__)) return g.__TAMS_TODAY__
+  try {
+    const fromUrl = g.location ? new URLSearchParams(g.location.search).get('demo-date') : null
+    if (fromUrl === '' || fromUrl === 'today') g.sessionStorage?.removeItem('tams-demo-date')
+    else if (fromUrl && ISO_DAY.test(fromUrl)) g.sessionStorage?.setItem('tams-demo-date', fromUrl)
+    const kept = g.sessionStorage?.getItem('tams-demo-date')
+    if (kept && ISO_DAY.test(kept)) return kept
+  } catch {
+    // Storage can be blocked; fall back to the live date.
+  }
+  return undefined
+}
+
+const pinned = pinnedDate()
+/** How today was chosen: the live Manila date, or a date pinned for a presentation or test. */
+export const CLOCK_SOURCE: 'live' | 'pinned' = pinned ? 'pinned' : 'live'
+export const DEMO_TODAY = pinned ?? manilaToday()
+export const DEMO_NOW = `${DEMO_TODAY}T${DEMO_TIME}:00+08:00`
 
 const DAY = 86_400_000
 
@@ -34,3 +69,8 @@ export function resetDemoClock(side?: 'customer' | 'admin') {
   if (!side || side === 'customer') ticks.customer = 0
   if (!side || side === 'admin') ticks.admin = 0
 }
+
+/** Whole weeks the sample data moves forward so its "today" lands on or up to six days before DEMO_TODAY. */
+export const SEED_SHIFT_DAYS = Math.floor(daysBetween(SEED_TODAY, DEMO_TODAY) / 7) * 7
+/** Calendar months between the seed month and the current month, for month-based sample history. */
+export const SEED_SHIFT_MONTHS = (+DEMO_TODAY.slice(0, 4) - +SEED_TODAY.slice(0, 4)) * 12 + (+DEMO_TODAY.slice(5, 7) - +SEED_TODAY.slice(5, 7))

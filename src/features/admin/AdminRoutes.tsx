@@ -206,7 +206,9 @@ function Shell() {
             </div>
           </header>
           <main className="mx-auto max-w-[1360px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <Outlet />
+            <div key={pathname} className="page-in">
+              <Outlet />
+            </div>
           </main>
         </div>
       </div>

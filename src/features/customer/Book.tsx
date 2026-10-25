@@ -1,6 +1,6 @@
 import { CheckCircle2, Minus, Plus } from 'lucide-react'
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { balanceDueDate, departureAvailability, downPayment, money, promoFor, rentalDays } from '../../domain/rules'
 import { DEMO_TODAY } from '../../lib/demoClock'
 import { fmtDate, fmtRange, fmtTime, peso } from '../../lib/format'
@@ -13,6 +13,7 @@ import { ConfirmDialog } from '../../ui/Dialog'
 import { TextArea, TextField } from '../../ui/Field'
 import { EmptyState } from '../../ui/EmptyState'
 import { mobileError, nameError } from '../../ui/validate'
+import { SampleFill } from '../../ui/SampleFill'
 import { BackLink } from './Explore'
 import { Steps } from './Steps'
 import { bookingSteps, Stepper } from './Timeline'
@@ -57,7 +58,9 @@ export function BookingForm() {
   const dep = data.departures.find((d) => d.id === departureId)
   const service = dep && data.services.find((s) => s.id === dep.serviceId)
   const [step, setStep] = useState<2 | 3>(2)
-  const [pax, setPax] = useState(1)
+  const [params] = useSearchParams()
+  // The traveller count chosen on the date page carries through login and into this form.
+  const [pax, setPax] = useState(() => Math.max(1, Math.min(dep ? departureAvailability(dep, data.bookings).left || 1 : 1, Number(params.get('pax')) || 1)))
   const [contact, setContact] = useState({ name: me?.name ?? '', mobile: me?.mobile ?? '', notes: '' })
   const [errors, setErrors] = useState({ name: '', mobile: '' })
   const [confirm, setConfirm] = useState(false)
@@ -102,7 +105,21 @@ export function BookingForm() {
       <h1 className="type-head text-[32px] text-charcoal md:text-[40px]">{step === 2 ? 'Booking details' : 'Review booking'}</h1>
       <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_360px]">
         {step === 2 ? (
-          <Card className="space-y-5 p-5">
+          <Card className="page-in space-y-5 p-5">
+            <SampleFill
+              dirty={contact.notes !== '' || contact.name !== (me?.name ?? '') || contact.mobile !== (me?.mobile ?? '') || pax > 1}
+              what="sample traveller details"
+              onFill={() => {
+                setPax(Math.min(2, avail.left))
+                setContact({ name: me?.name || 'Maria Santos', mobile: me?.mobile || '0917 555 0123', notes: 'Window seats if possible. One traveller is vegetarian.' })
+                setErrors({ name: '', mobile: '' })
+              }}
+              onClear={() => {
+                setPax(1)
+                setContact({ name: '', mobile: '', notes: '' })
+                setErrors({ name: '', mobile: '' })
+              }}
+            />
             <div>
               <p className="mb-2 text-sm font-medium text-ink">Travellers</p>
               <div className="flex items-center gap-3">
@@ -142,7 +159,7 @@ export function BookingForm() {
             </Button>
           </Card>
         ) : (
-          <Card className="divide-y divide-line">
+          <Card className="page-in divide-y divide-line">
             <ReviewBlock title="Trip" onChange={() => navigate(`/app/tours/${service.id}/dates?d=${dep.id}`)}>
               <p className="font-medium text-ink">{service.name}</p>
               <p>{fmtRange(dep.startDate, dep.endDate)}</p>

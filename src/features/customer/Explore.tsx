@@ -167,7 +167,7 @@ export function ExplorePage({ defaultView = 'tours' }: { defaultView?: View }) {
               />
             </div>
           ) : (
-            <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <ul key={JSON.stringify(f)} className="fade-in grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {tours.map((s) => (
                 <li key={s.id}>
                   <TourCard service={s} window={{ from: f.from, pax: f.pax }} />
@@ -180,7 +180,7 @@ export function ExplorePage({ defaultView = 'tours' }: { defaultView?: View }) {
             <EmptyState title="No destinations match these filters" body="Clear a filter to see every place we travel to in Luzon." />
           </div>
         ) : (
-          <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <ul key={JSON.stringify(f)} className="fade-in grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {dests.map((x) => (
               <li key={x.id}>
                 <DestinationCard dest={x} />

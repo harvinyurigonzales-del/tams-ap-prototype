@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { Button } from './Button'
 
@@ -14,6 +14,7 @@ interface DialogProps {
 /** Native <dialog> so focus trapping, Escape and the backdrop come from the browser. */
 export function Dialog({ open, onClose, title, children, footer, wide }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null)
+  const titleId = useId()
   useEffect(() => {
     const d = ref.current
     if (!d) return
@@ -23,6 +24,7 @@ export function Dialog({ open, onClose, title, children, footer, wide }: DialogP
   return (
     <dialog
       ref={ref}
+      aria-labelledby={titleId}
       onClose={onClose}
       onCancel={(e) => {
         e.preventDefault()
@@ -34,7 +36,7 @@ export function Dialog({ open, onClose, title, children, footer, wide }: DialogP
       {open && (
         <div className="flex max-h-[85vh] flex-col">
           <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
-            <h2 className="font-display text-lg font-semibold">{title}</h2>
+            <h2 id={titleId} className="font-display text-lg font-semibold">{title}</h2>
             <button onClick={onClose} className="-mr-1 rounded-lg p-1 text-ink-2 hover:bg-surface-muted" aria-label="Close">
               <X className="size-5" />
             </button>
