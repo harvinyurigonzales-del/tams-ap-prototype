@@ -158,7 +158,7 @@ export function WithdrawButton({ kind, id }: { kind: 'custom' | 'rental'; id: st
   )
 }
 
-/** Presenter shortcut that plays the staff side forward. Shown only in presenter mode. */
+/** Demo shortcut that plays the staff side forward. Shown while demo shortcuts are on (the default). */
 export function SimulateStaff({ kind, id, status }: { kind: 'custom' | 'rental'; id: string; status: RequestStatus }) {
   const simulate = useCustomer((s) => s.simulateStaffUpdate)
   const toast = useUi((s) => s.toast)
@@ -168,7 +168,7 @@ export function SimulateStaff({ kind, id, status }: { kind: 'custom' | 'rental';
   return (
     <div className="rounded-2xl border border-dashed border-line-strong p-4">
       <p className="flex items-center gap-1.5 text-xs font-semibold text-ink-2">
-        <FlaskConical className="size-4" aria-hidden /> Presenter shortcut
+        <FlaskConical className="size-4" aria-hidden /> Demo shortcut: staff steps
       </p>
       <p className="mt-1 text-xs text-ink-2">Plays the staff team’s next step on this request.</p>
       <Button
@@ -186,7 +186,7 @@ export function SimulateStaff({ kind, id, status }: { kind: 'custom' | 'rental';
   )
 }
 
-/** Presenter shortcut for bookings: plays the staff team's next step so the whole journey can be shown from the customer side. */
+/** Demo shortcut for bookings: plays the staff team's next step so the whole journey can be shown from the customer side. */
 export function SimulateBooking({ booking }: { booking: Booking }) {
   const { data, simulateBookingStep } = useCustomer()
   const toast = useUi((s) => s.toast)
@@ -194,11 +194,14 @@ export function SimulateBooking({ booking }: { booking: Booking }) {
   const steps = staffSteps(data, booking)
   if (!presenter || steps.length === 0) return null
   return (
-    <div className="rounded-2xl border border-dashed border-line-strong p-4">
-      <p className="flex items-center gap-1.5 text-xs font-semibold text-ink-2">
-        <FlaskConical className="size-4" aria-hidden /> Presenter shortcut
+    <div className="rounded-2xl border-2 border-dashed border-brand-300 bg-brand-50 p-4">
+      <p className="flex items-center gap-1.5 text-sm font-semibold text-brand-800">
+        <FlaskConical className="size-4" aria-hidden /> Demo shortcut: staff steps
       </p>
-      <p className="mt-1 text-xs text-ink-2">Plays what the staff team does next. Each step sends the customer a notification.</p>
+      <p className="mt-1 text-xs text-ink-2">
+        Plays what the staff team does next, without switching to the staff portal. Each step sends the customer a notification. Staff do the same from Bookings in the
+        staff portal.
+      </p>
       <div className="mt-2 flex flex-wrap gap-2">
         {steps.map((st) => (
           <Button

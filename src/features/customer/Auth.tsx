@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarDays, ChevronDown, Eye, EyeOff, Lock, Mail, MailCheck, Phone, UserRound, Users } from 'lucide-react'
+import { ArrowLeft, CalendarDays, ChevronDown, Eye, EyeOff, Lock, Mail, MailCheck, Phone, RotateCcw, UserRound, Users } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { departureAvailability } from '../../domain/rules'
@@ -7,10 +7,12 @@ import { fmtRange } from '../../lib/format'
 import { photoRef } from '../../seed/photos'
 import { destinationFor, SAMPLE_ACCOUNTS, signIn, useWorkspace, workspaceHome } from '../../state/auth'
 import { useCustomer } from '../../state/customerStore'
+import { resetAll } from '../../state/demo'
+import { usePresenter } from '../../state/presenter'
 import { useUi } from '../../state/ui'
 import { BrandMark } from '../../ui/BrandMark'
 import { Button } from '../../ui/Button'
-import { Dialog } from '../../ui/Dialog'
+import { ConfirmDialog, Dialog } from '../../ui/Dialog'
 import { TextField } from '../../ui/Field'
 import { Picture } from '../../ui/Picture'
 import { emailError, mobileError, nameError, newPasswordError, passwordError, sleep } from '../../ui/validate'
@@ -195,6 +197,45 @@ function SampleAccounts({ busy, onUse }: { busy: boolean; onUse: (a: (typeof SAM
   )
 }
 
+/** Demo tools under the login form: put every record back to the sample data, and switch the staff-step shortcuts. */
+function DemoTools() {
+  const [ask, setAsk] = useState(false)
+  const toast = useUi((s) => s.toast)
+  const presenter = usePresenter()
+  return (
+    <section className="mt-4 rounded-2xl border border-dashed border-line-strong p-4" aria-label="Demo tools">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-ink">Demo tools</p>
+          <p className="text-xs text-ink-2">Start the demo again with the original sample bookings and accounts.</p>
+        </div>
+        <Button type="button" size="sm" variant="secondary" icon={<RotateCcw className="size-4" aria-hidden />} onClick={() => setAsk(true)}>
+          Reset demo
+        </Button>
+      </div>
+      <label className="mt-3 flex cursor-pointer items-start gap-2.5 text-xs text-ink-2">
+        <input type="checkbox" checked={presenter.on} onChange={(e) => presenter.set(e.target.checked)} className="mt-0.5 size-4 accent-brand-600" />
+        <span>
+          <span className="font-semibold text-ink">Staff-step shortcuts on customer trips.</span> Lets you verify payments, confirm, assign a van and complete a trip from
+          the customer’s booking page. Staff do the same from Bookings in the staff portal.
+        </span>
+      </label>
+      <ConfirmDialog
+        open={ask}
+        onClose={() => setAsk(false)}
+        title="Reset the demo?"
+        body="Every booking, payment, request, message and account goes back to the sample data, and anyone logged in on this browser is logged out. This cannot be undone."
+        confirmLabel="Reset demo"
+        tone="danger"
+        onConfirm={() => {
+          resetAll()
+          toast('Demo reset. Every record is back to the sample data.')
+        }}
+      />
+    </section>
+  )
+}
+
 /* ------------------------------------------------------------------ Log in */
 
 /**
@@ -301,6 +342,7 @@ export function Login() {
           submit(undefined, a)
         }}
       />
+      <DemoTools />
     </AuthLayout>
   )
 }

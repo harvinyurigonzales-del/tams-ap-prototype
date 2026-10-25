@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { money, shortRange } from '../../domain/rules'
 import { peso } from '../../lib/format'
 import { useAdmin } from '../../state/adminStore'
+import { staffSteps, type StaffStep } from '../../state/customerStore'
 import type { BookingStatus } from '../../seed/types'
 import { Badge, LocalTag, StatusBadge } from '../../ui/Badge'
 import { Card } from '../../ui/Card'
@@ -14,6 +15,15 @@ import { customerOf, MiniKpi, paginate, Pager, SearchInput, serviceOf, Table, Ta
 
 type Tab = 'All' | BookingStatus
 type PayFilter = 'All' | 'Submitted' | 'Unpaid' | 'Partially paid' | 'Fully paid'
+
+/** What staff do next on a booking, shown in the list so the stage controls in the details panel are easy to find. */
+const NEXT: Partial<Record<StaffStep, string>> = {
+  verify: 'Verify payment',
+  approveCancel: 'Review cancellation',
+  confirm: 'Confirm booking',
+  assign: 'Assign van',
+  complete: 'Mark completed',
+}
 
 export function Bookings() {
   const data = useAdmin((s) => s.data)
@@ -55,7 +65,7 @@ export function Bookings() {
 
   return (
     <div>
-      <PageHeader title="Bookings" subtitle="Review bookings, verify payments and confirm trips." />
+      <PageHeader title="Bookings" subtitle="Open a booking to verify its payment, confirm it, assign a van and driver, and mark the trip completed. The Next step column shows what each one needs." />
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MiniKpi label="All bookings" value={data.bookings.length} />
         <MiniKpi label="Pending" value={count('Pending')} />
@@ -86,11 +96,12 @@ export function Bookings() {
             </div>
           </div>
           <Table
-            head={['Booking', 'Customer', 'Trip', 'Pax', 'Total', 'Status', 'Payment']}
+            head={['Booking', 'Next step', 'Customer', 'Trip', 'Pax', 'Total', 'Status', 'Payment']}
             empty={rows.length === 0 && <EmptyState title="No bookings match" body="Clear the search or change the filters." />}
           >
             {p.rows.map((b) => {
               const m = money(b, data.payments)
+              const next = staffSteps(data, b).map((st) => NEXT[st]).find(Boolean)
               return (
                 <tr
                   key={b.id}
@@ -103,6 +114,18 @@ export function Bookings() {
                       {b.id}
                     </button>
                     {b.origin === 'local' && <LocalTag />}
+                  </td>
+                  <td className={td}>
+                    {next ? (
+                      <button
+                        className="rounded-lg bg-brand-600 px-2.5 py-1 text-xs font-semibold whitespace-nowrap text-white hover:bg-brand-700"
+                        onClick={(e) => { e.stopPropagation(); update('id', b.id) }}
+                      >
+                        {next}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-ink-3">{b.status === 'Pending' ? 'Awaiting payment' : b.status === 'Confirmed' ? 'Awaiting balance' : 'Done'}</span>
+                    )}
                   </td>
                   <td className={td}>{customerOf(data, b.customerId)?.name}</td>
                   <td className={td}>

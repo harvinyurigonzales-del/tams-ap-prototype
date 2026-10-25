@@ -34,7 +34,7 @@ test('presenter plays the staff side of a booking, and every step notifies the c
   await step('Staff verify the payment').click()
   await step('Mark the trip completed').click()
   await expect(page.getByText('Completed').first()).toBeVisible()
-  await expect(page.getByText('Presenter shortcut')).toHaveCount(0)
+  await expect(page.getByText('Demo shortcut: staff steps')).toHaveCount(0)
 
   await page.getByRole('button', { name: /^Notifications/ }).click()
   await page.getByRole('link', { name: 'View all notifications' }).click()

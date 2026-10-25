@@ -158,7 +158,7 @@ function Thread({ q }: { q: Inquiry }) {
       {presenter && q.status === 'Awaiting staff' && (
         <div className="mt-4 rounded-2xl border border-dashed border-line-strong p-4">
           <p className="flex items-center gap-1.5 text-xs font-semibold text-ink-2">
-            <FlaskConical className="size-4" aria-hidden /> Presenter shortcut
+            <FlaskConical className="size-4" aria-hidden /> Demo shortcut
           </p>
           <p className="mt-1 text-xs text-ink-2">Shows the staff team’s prepared reply to this conversation.</p>
           <Button
