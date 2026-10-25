@@ -20,14 +20,14 @@ export function Preferences() {
   const save = () => {
     const r = setPreferences(p)
     if (!r.ok) return setError(r.error)
-    toast('Preferences saved for this demo session. Your suggestions are updated.')
+    toast('Preferences saved. Your suggestions are updated.')
     navigate('/app')
   }
   return (
     <div className="mx-auto max-w-2xl">
       <BackLink to="/app/account" label="Account" />
       <h1 className="type-head text-[32px] text-charcoal md:text-[40px]">Travel preferences</h1>
-      <p className="mt-1 text-sm text-ink-2">We use these to suggest tours and destinations on your home screen. They are kept only for this demo session.</p>
+      <p className="mt-1 text-sm text-ink-2">We use these to suggest tours and destinations on your home page.</p>
       <Card className="mt-5 space-y-5 p-5">
         <fieldset>
           <legend className="mb-2 text-sm font-medium text-ink">What do you enjoy?</legend>

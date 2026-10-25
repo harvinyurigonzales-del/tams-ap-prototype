@@ -8,7 +8,7 @@ import { fmtDate, fmtRange, fmtStamp, fmtTime, peso } from '../../lib/format'
 import { myRecords, useCustomer } from '../../state/customerStore'
 import { useUi } from '../../state/ui'
 import type { Booking, Dataset } from '../../seed/types'
-import { SampleTag, StatusBadge } from '../../ui/Badge'
+import { StatusBadge } from '../../ui/Badge'
 import { Button, DisabledHint, LinkButton } from '../../ui/Button'
 import { Card, Row } from '../../ui/Card'
 import { ConfirmDialog } from '../../ui/Dialog'
@@ -16,7 +16,7 @@ import { EmptyState } from '../../ui/EmptyState'
 import { Picture } from '../../ui/Picture'
 import { bookingTitle } from './Book'
 import { BackLink } from './Explore'
-import { AskAboutButton, RequestStatusBadge } from './Requests'
+import { AskAboutButton, SimulateBooking, RequestStatusBadge } from './Requests'
 import { bookingSteps, Stepper } from './Timeline'
 
 type Tab = 'bookings' | 'custom' | 'rental'
@@ -246,7 +246,7 @@ export function TripDetails() {
               )}
             </div>
             {b.status === 'Cancelled' && (
-              <p className="mt-4 rounded-xl bg-bad-bg px-4 py-3 text-sm text-bad">Cancelled{b.cancelReason ? `: ${b.cancelReason}` : ''}. Refunds are handled outside the prototype.</p>
+              <p className="mt-4 rounded-xl bg-bad-bg px-4 py-3 text-sm text-bad">Cancelled{b.cancelReason ? `: ${b.cancelReason}` : ''}. Staff will explain any refund when they contact you.</p>
             )}
             {b.cancellationRequested && b.status !== 'Cancelled' && (
               <p className="mt-4 rounded-xl bg-warn-bg px-4 py-3 text-sm text-warn">Cancellation requested. The agency will contact you about it.</p>
@@ -292,7 +292,6 @@ export function TripDetails() {
             {m.balance > 0 && b.status !== 'Cancelled' && (
               <p className="mt-2 text-xs text-ink-2">
                 Down payment {peso(m.down)} · balance due {fmtDate(m.dueDate, { weekday: true, year: false })}
-                <SampleTag />
               </p>
             )}
             {m.submitted.length > 0 && <p className="mt-3 rounded-xl bg-warn-bg px-3 py-2 text-sm text-warn">A payment of {peso(m.submitted[0].amount)} is awaiting verification.</p>}
@@ -313,13 +312,14 @@ export function TripDetails() {
               <AskAboutButton kind="booking" id={b.id} />
             </div>
           </Card>
+          <SimulateBooking booking={b} />
         </aside>
       </div>
       <ConfirmDialog
         open={cancel}
         onClose={() => setCancel(false)}
         title="Request cancellation?"
-        body="This sends a request to the agency. Your booking stays as it is until staff review it. Refunds are handled outside the prototype."
+        body="This sends a request to the agency. Your booking stays as it is until staff review it and contact you about any refund."
         confirmLabel="Send request"
         tone="danger"
         onConfirm={() => {
@@ -385,7 +385,7 @@ function PreTravel({ booking: b }: { booking: Booking }) {
           <dt className="text-ink-2">Trip desk</dt>
           <dd className="font-medium text-ink">
             <Phone className="mr-1 inline size-3.5" aria-hidden />
-            {TRIP_DESK.mobile} <SampleTag>Sample</SampleTag>
+            {TRIP_DESK.mobile}
           </dd>
         </div>
       </dl>
@@ -408,7 +408,7 @@ function PreTravel({ booking: b }: { booking: Booking }) {
           )
         })}
       </ul>
-      <p className="mt-2 text-xs text-ink-3">Ticks last only for this demo session.</p>
+      
     </Card>
   )
 }

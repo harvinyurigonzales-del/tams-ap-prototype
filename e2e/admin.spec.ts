@@ -3,7 +3,7 @@ import { expect, test } from './fixtures'
 test('admin walkthrough A1–A13', async ({ page }) => {
   await page.goto('/admin/dashboard')
   await expect(page.getByText('Please log in as staff to continue.')).toBeVisible()
-  await page.getByRole('button', { name: 'Use demo account' }).click()
+  await page.getByRole('button', { name: 'Use admin account' }).click()
   await expect(page.getByRole('heading', { name: 'Magandang umaga, Admin' })).toBeVisible()
   await expect(page.getByText('₱25,092')).toBeVisible()
   await expect(page.getByText('₱31,694')).toBeVisible()
@@ -58,7 +58,7 @@ test('admin walkthrough A1–A13', async ({ page }) => {
 
 test('admin requests and inquiries (customer revision support)', async ({ page }) => {
   await page.goto('/admin/login')
-  await page.getByRole('button', { name: 'Use demo account' }).click()
+  await page.getByRole('button', { name: 'Use admin account' }).click()
   const nav = page.getByRole('navigation', { name: 'Admin' })
   await nav.getByRole('link', { name: 'Requests' }).click()
   await page.getByRole('button', { name: /CR-2026-0009/ }).click()
@@ -72,7 +72,7 @@ test('admin requests and inquiries (customer revision support)', async ({ page }
 
   await nav.getByRole('link', { name: 'Inquiries' }).click()
   await page.getByRole('button', { name: /Senior-friendly pace/ }).click()
-  await page.getByRole('button', { name: 'Insert scripted reply' }).click()
+  await page.getByRole('button', { name: 'Insert suggested reply' }).click()
   await page.getByRole('button', { name: 'Record reply' }).click()
   await expect(page.getByText('Staff replied').first()).toBeVisible()
 
@@ -82,7 +82,7 @@ test('admin requests and inquiries (customer revision support)', async ({ page }
 
 test('sales outlook and replying to a review', async ({ page }) => {
   await page.goto('/admin/login')
-  await page.getByRole('button', { name: 'Use demo account' }).click()
+  await page.getByRole('button', { name: 'Use admin account' }).click()
   await expect(page.getByRole('heading', { name: 'Sales outlook' })).toBeVisible()
   await expect(page.getByRole('definition').filter({ hasText: 'December 2026' })).toBeVisible()
   await page.getByText('Show forecast as a table').click()

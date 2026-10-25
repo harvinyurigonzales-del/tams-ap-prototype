@@ -1,7 +1,7 @@
 import { X } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { amountPaid, money, shortRange } from '../../domain/rules'
+import { money, shortRange } from '../../domain/rules'
 import { fmtDate, peso } from '../../lib/format'
 import { DEMO_TODAY } from '../../lib/demoClock'
 import { useAdmin } from '../../state/adminStore'
@@ -20,7 +20,7 @@ export function Customers() {
   const needle = q.trim().toLowerCase()
   const stats = (id: string) => {
     const bs = data.bookings.filter((b) => b.customerId === id)
-    return { bookings: bs.length, spent: bs.reduce((n, b) => n + amountPaid(b.id, data.payments), 0), last: bs.map((b) => b.startDate).sort().at(-1) }
+    return { bookings: bs.length, last: bs.map((b) => b.startDate).sort().at(-1) }
   }
   const rows = data.customers.filter((c) => !needle || `${c.id} ${c.name} ${c.email} ${c.mobile} ${c.city}`.toLowerCase().includes(needle))
   const pg = paginate(rows, page)
@@ -40,7 +40,7 @@ export function Customers() {
           <div className="border-b border-line p-4">
             <SearchInput value={q} onChange={(v) => { setQ(v); setPage(1) }} placeholder="Search name, email, mobile or city" />
           </div>
-          <Table head={['Customer', 'Contact', 'City', 'Bookings', 'Paid (verified)', 'Last trip']} empty={rows.length === 0 && <EmptyState title="No customers match" />}>
+          <Table head={['Customer', 'Contact', 'City', 'Bookings', 'Last trip']} empty={rows.length === 0 && <EmptyState title="No customers match" />}>
             {pg.rows.map((x) => {
               const st = stats(x.id)
               return (
@@ -56,7 +56,6 @@ export function Customers() {
                   </td>
                   <td className={td}>{x.city || '—'}</td>
                   <td className={`${td} tnum`}>{st.bookings}</td>
-                  <td className={`${td} tnum`}>{peso(st.spent)}</td>
                   <td className={td}>{st.last ? fmtDate(st.last) : '—'}</td>
                 </tr>
               )
@@ -79,7 +78,6 @@ export function Customers() {
               <Row label="Email">{c.email}</Row>
               <Row label="Mobile">{c.mobile}</Row>
               <Row label="City">{c.city || '—'}</Row>
-              <Row label="Paid (verified)">{peso(stats(c.id).spent)}</Row>
             </div>
             <h3 className="mt-5 mb-2 text-xs font-semibold tracking-wide text-ink-3 uppercase">Booking history</h3>
             <ul className="space-y-2">

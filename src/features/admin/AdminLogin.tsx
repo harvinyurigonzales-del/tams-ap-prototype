@@ -2,7 +2,7 @@ import { Lock, Mail } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { AuthCard } from '../../app/AuthCard'
-import { DEMO_ADMIN, useAdmin } from '../../state/adminStore'
+import { DEMO_ADMIN, DEMO_STAFF, useAdmin } from '../../state/adminStore'
 import { Button } from '../../ui/Button'
 import { TextField } from '../../ui/Field'
 import { emailError, passwordError, sleep } from '../../ui/validate'
@@ -14,7 +14,8 @@ export function AdminLogin() {
   const [params] = useSearchParams()
   const loc = useLocation()
   const guarded = (loc.state as { guarded?: boolean } | null)?.guarded || params.has('next')
-  const next = params.get('next')?.startsWith('/admin') ? params.get('next')! : '/admin'
+  // Login starts on the dashboard; only a link to a specific record (with ?id=…) is followed after login.
+  const next = params.get('next')?.startsWith('/admin') && params.get('next')!.includes('?') ? params.get('next')! : '/admin'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
@@ -37,7 +38,7 @@ export function AdminLogin() {
   }
 
   return (
-    <AuthCard title="Staff login" subtitle="TAMS AP admin portal (prototype)">
+    <AuthCard title="Staff login" subtitle="TAMS AP admin portal">
       {guarded && <p className="mb-4 rounded-xl bg-info-bg px-3.5 py-2.5 text-sm text-info">Please log in as staff to continue.</p>}
       <form onSubmit={submit} noValidate className="space-y-4">
         <TextField label="Work email" type="email" autoComplete="off" icon={<Mail className="size-5" />} value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} />
@@ -59,20 +60,31 @@ export function AdminLogin() {
         <Button type="submit" size="lg" full loading={busy}>
           Log in
         </Button>
-        <Button
-          variant="secondary"
-          size="lg"
-          full
-          disabled={busy}
-          onClick={() => {
-            setEmail(DEMO_ADMIN.email)
-            setPassword(DEMO_ADMIN.password)
-            submit(undefined, DEMO_ADMIN)
-          }}
-        >
-          Use demo account
-        </Button>
-        <p className="text-center text-xs text-ink-3">One fictional staff account. Five wrong attempts lock the form for 30 seconds.</p>
+        <div className="rounded-xl border border-line p-3">
+          <p className="text-sm font-semibold text-ink">Try it with a sample account</p>
+          <p className="mt-0.5 text-xs text-ink-2">Admin sees every module. Staff handle bookings, payments, requests and the fleet, without the admin-only pages.</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {[
+              { label: 'Use admin account', acct: DEMO_ADMIN },
+              { label: 'Use staff account', acct: DEMO_STAFF },
+            ].map(({ label, acct }) => (
+              <Button
+                key={label}
+                variant="secondary"
+                full
+                disabled={busy}
+                onClick={() => {
+                  setEmail(acct.email)
+                  setPassword(acct.password)
+                  submit(undefined, acct)
+                }}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+        </div>
+        <p className="text-center text-xs text-ink-3">Five wrong attempts lock the form for 30 seconds.</p>
       </form>
     </AuthCard>
   )

@@ -7,7 +7,7 @@ import { DEMO_NOW } from '../../lib/demoClock'
 import { demoReceiptSrc, sampleReference } from '../../lib/receipt'
 import { useCustomer, useMe } from '../../state/customerStore'
 import type { Payment, PaymentMethod, PaymentType } from '../../seed/types'
-import { SampleTag, StatusBadge } from '../../ui/Badge'
+import { StatusBadge } from '../../ui/Badge'
 import { Button, LinkButton } from '../../ui/Button'
 import { Card, Row } from '../../ui/Card'
 import { ConfirmDialog, Dialog } from '../../ui/Dialog'
@@ -20,9 +20,9 @@ import { Steps } from './Steps'
 
 /** Fictional payee details. Nothing is ever charged; there is no payment gateway. */
 const PAYEE: Record<Exclude<PaymentMethod, 'Cash'>, { label: string; lines: string[] }> = {
-  GCash: { label: 'GCash', lines: ['Account name: TAMS AP Travel (demo)', 'Number: 0900 555 0300'] },
-  Maya: { label: 'Maya', lines: ['Account name: TAMS AP Travel (demo)', 'Number: 0900 555 0301'] },
-  'Bank transfer': { label: 'Bank transfer', lines: ['Bank: Sample Bank (fictional)', 'Account name: TAMS AP Travel (demo)', 'Account no.: 0000-1234-5678'] },
+  GCash: { label: 'GCash', lines: ['Account name: TAMS AP Travel', 'Number: 0900 555 0300'] },
+  Maya: { label: 'Maya', lines: ['Account name: TAMS AP Travel', 'Number: 0900 555 0301'] },
+  'Bank transfer': { label: 'Bank transfer', lines: ['Account name: TAMS AP Travel', 'Account no.: 0000-1234-5678'] },
 }
 const METHODS = Object.keys(PAYEE) as Exclude<PaymentMethod, 'Cash'>[]
 const MAX_BYTES = 5 * 1024 * 1024
@@ -116,7 +116,7 @@ export function Pay() {
           <SampleFill
             dirty={!!reference || !!proof}
             label="Use sample payment details"
-            what={`a sample ${method} reference and a matching demo receipt`}
+            what={`a sample ${method} reference and a matching sample receipt`}
             onFill={() => fillSample()}
             onClear={() => (setReference(''), setSampleRef(''), setProof(null), setErrors({ reference: '', proof: '' }))}
           />
@@ -133,7 +133,7 @@ export function Pay() {
             </div>
             <div className="mt-3 rounded-xl bg-surface-muted px-4 py-3 text-sm">
               <p className="mb-1 text-xs font-semibold tracking-wide text-ink-3 uppercase">
-                Send to <SampleTag>Demo only</SampleTag>
+                Send to
               </p>
               {PAYEE[method].lines.map((l) => (
                 <p key={l} className="text-ink">
@@ -173,7 +173,7 @@ export function Pay() {
             {proof ? (
               <div className="flex items-center gap-3 rounded-xl border border-line p-3">
                 {proof.kind === 'sample' ? (
-                  <button type="button" onClick={() => setViewReceipt(true)} className="shrink-0 rounded focus-visible:outline-2" aria-label="View demo receipt">
+                  <button type="button" onClick={() => setViewReceipt(true)} className="shrink-0 rounded focus-visible:outline-2" aria-label="View sample receipt">
                     <img src={receipt} alt="" className="h-16 w-12 rounded border border-line object-cover object-top" />
                   </button>
                 ) : proof.url ? (
@@ -183,7 +183,7 @@ export function Pay() {
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-ink">{proof.name}</p>
-                  <p className="text-xs text-ink-2">{proof.kind === 'sample' ? 'Fictional demo receipt. It shows your method, amount and reference.' : 'Preview only. The file stays on this device.'}</p>
+                  <p className="text-xs text-ink-2">{proof.kind === 'sample' ? 'Sample receipt with your method, amount and reference.' : 'Preview only. The file stays on this device.'}</p>
                 </div>
                 {proof.kind === 'sample' && (
                   <Button size="sm" variant="ghost" icon={<Eye className="size-4" aria-hidden />} onClick={() => setViewReceipt(true)}>
@@ -234,9 +234,9 @@ export function Pay() {
           </Card>
         </aside>
       </div>
-      <Dialog open={viewReceipt} onClose={() => setViewReceipt(false)} title="Demo receipt">
+      <Dialog open={viewReceipt} onClose={() => setViewReceipt(false)} title="Sample receipt">
         <img src={receipt} alt={`Fictional ${method} receipt for ${peso(chosen.amount)}, reference ${reference.trim()}`} className="mx-auto max-h-[60vh] rounded-lg border border-line" />
-        <p className="mt-3 text-center text-xs text-ink-3">Made for the demo from the details on this form. No money was sent.</p>
+        <p className="mt-3 text-center text-xs text-ink-3">Made from the details on this form.</p>
       </Dialog>
       <ConfirmDialog
         open={confirm}

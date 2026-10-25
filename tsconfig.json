@@ -11,7 +11,7 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vite/client", "vite-plugin-pwa/react", "vite-plugin-pwa/info"]
+    "types": ["vite/client"]
   },
   "include": ["src"]
 }

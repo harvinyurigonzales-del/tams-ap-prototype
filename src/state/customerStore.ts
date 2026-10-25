@@ -7,14 +7,16 @@ import {
   canTransition, draftCustomProposal, PROPOSAL_VALID_DAYS, proposalExpired, rentalEndDate, rentalEstimate, requestDestination, validateCustom, validateRental,
   type CustomInput, type RentalInput,
 } from '../domain/requests'
-import { departureAvailability, payableOptions, tourTotal } from '../domain/rules'
+import { assignableTargets, canConfirm, departureAvailability, driverConflict, money, payableOptions, shortRange, tourTotal, vehicleConflict } from '../domain/rules'
 import { publicName, reviewableTrips, validateReview } from '../domain/reviews'
 import { customerSeed } from '../seed/derive'
+import { INTERESTS } from '../seed/types'
 import type {
   AppNotification, Booking, CustomRequest, Customer, Dataset, Inquiry, Interest, Payment, PaymentMethod, PaymentType, RentalRequest,
   RentalTripType, RequestStatus, Review, SavedItem, TravelPreferences, TripPace,
 } from '../seed/types'
 import { nextId } from './ids'
+import { budgetOf, firstInvalid, pickupLabel, requestDates, toPlannedTrip, type PlannerAnswers, type TripPlan } from '../domain/planner/engine'
 
 // Customer simulation: its own in-memory working copy of the seed. Nothing is persisted and nothing is
 // shared with the admin simulation.
@@ -67,6 +69,17 @@ export interface CustomForm extends CustomInput {
   pace: TripPace
 }
 
+export interface PlannedTripInput {
+  answers: PlannerAnswers
+  plan: TripPlan
+  contactName: string
+  contactMobile: string
+}
+
+/** Planner interests that are also catalog interests; Mountains maps to cool weather. */
+const plannerInterests = (xs: string[]): Interest[] =>
+  [...new Set(xs.map((x) => (x === 'Mountains' ? 'Cool weather' : x)).filter((x): x is Interest => (INTERESTS as string[]).includes(x)))]
+
 export interface RentalForm extends RentalInput {
   stops: string[]
   requests: string
@@ -79,6 +92,9 @@ export interface ChatEntry {
   from: 'customer' | 'assistant'
   text: string
   answer?: AssistantAnswer
+  /** An answer that failed; `question` is kept so the customer can retry it. */
+  error?: boolean
+  question?: string
 }
 
 export const EMPTY_PREFS: TravelPreferences = { interests: [], budgetMax: 0, duration: 'Any', style: 'Any' }
@@ -131,16 +147,20 @@ interface CustomerState {
   drafts: { custom?: CustomForm; rental?: RentalForm }
   saveDraft: (kind: 'custom' | 'rental', form: CustomForm | RentalForm | undefined) => void
   submitCustom: (f: CustomForm) => Result<CustomRequest>
+  /** Sends a plan from the AI planner into the custom-request workflow. */
+  submitPlannedTrip: (input: PlannedTripInput) => Result<CustomRequest>
   submitRental: (f: RentalForm) => Result<RentalRequest>
   acceptProposal: (requestId: string) => Result<Booking>
   acceptQuote: (requestId: string) => Result<Booking>
   requestChanges: (kind: 'custom' | 'rental', requestId: string, text: string) => Result
   withdrawRequest: (kind: 'custom' | 'rental', requestId: string) => Result
   simulateStaffUpdate: (kind: 'custom' | 'rental', requestId: string) => Result<RequestStatus>
+  simulateBookingStep: (bookingId: string, step: StaffStep) => Result<string>
   // Messages and assistant
   chat: ChatEntry[]
   addChat: (entry: Omit<ChatEntry, 'id'>) => void
   clearChat: () => void
+  removeChat: (id: number) => void
   escalate: (input: { subject: string; text: string; relatedRef?: string }) => Result<Inquiry>
   sendMessage: (inquiryId: string, text: string) => Result
   resolveInquiry: (inquiryId: string) => Result
@@ -175,6 +195,40 @@ const initial = () => ({
 
 const ok = <T,>(value: T) => ({ ok: true as const, value })
 const fail = (error: string) => ({ ok: false as const, error })
+
+/** Staff steps the presenter can play on a booking. */
+export type StaffStep = 'verify' | 'reject' | 'confirm' | 'assign' | 'remind' | 'approveCancel' | 'declineCancel' | 'complete'
+
+export const STEP_LABEL: Record<StaffStep, string> = {
+  verify: 'Staff verify the payment',
+  reject: 'Staff reject the payment',
+  confirm: 'Staff confirm the booking',
+  assign: 'Staff assign a van and driver',
+  remind: 'Send the trip reminder',
+  approveCancel: 'Staff approve the cancellation',
+  declineCancel: 'Staff decline the cancellation',
+  complete: 'Mark the trip completed',
+}
+const STEP_DONE: Record<StaffStep, string> = {
+  verify: 'Payment verified.', reject: 'Payment rejected.', confirm: 'Booking confirmed.', assign: 'Van and driver assigned.', remind: 'Reminder sent.',
+  approveCancel: 'Booking cancelled.', declineCancel: 'Cancellation declined.', complete: 'Trip marked completed.',
+}
+
+/** The staff steps that make sense for a booking right now, in the order the journey goes. */
+export function staffSteps(d: Dataset, b: Booking): StaffStep[] {
+  if (b.status === 'Cancelled' || b.status === 'Completed') return []
+  const out: StaffStep[] = []
+  if (d.payments.some((p) => p.bookingId === b.id && p.status === 'Submitted')) out.push('verify', 'reject')
+  if (b.cancellationRequested) out.push('approveCancel', 'declineCancel')
+  if (b.status === 'Pending' && canConfirm(b, d.payments).ok) out.push('confirm')
+  if (b.status === 'Confirmed') {
+    const t = assignableTargets(d).find((x) => (b.departureId ? x.kind === 'departure' && x.id === b.departureId : x.kind === 'booking' && x.id === b.id))
+    if (t && !t.assignment) out.push('assign')
+    if (t?.assignment) out.push('remind')
+    if (money(b, d.payments).balance === 0 && !b.cancellationRequested) out.push('complete')
+  }
+  return out
+}
 
 function notify(d: Dataset, customerId: string, n: Omit<AppNotification, 'id' | 'read' | 'customerId' | 'origin'>) {
   d.notifications.unshift({ id: nextId(d, 'notification'), read: false, customerId, origin: 'local', ...n })
@@ -216,7 +270,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     const s = get()
     const taken = s.accounts.some((a) => a.email.toLowerCase() === email.trim().toLowerCase())
       || s.data.customers.some((c) => c.email.toLowerCase() === email.trim().toLowerCase())
-    if (taken) return { ok: false, error: 'An account with this email already exists in this demo. Log in instead.' }
+    if (taken) return { ok: false, error: 'An account with this email already exists. Log in instead.' }
     const data = structuredClone(s.data)
     const customer: Customer = { id: nextId(data, 'customer'), name: name.trim(), email: email.trim(), mobile: mobile.trim(), city: '', registered: DEMO_TODAY, origin: 'local' }
     data.customers.push(customer)
@@ -308,6 +362,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     const b = data.bookings.find((x) => x.id === bookingId && x.customerId === s.customerId)
     if (!b || (b.status !== 'Pending' && b.status !== 'Confirmed')) return { ok: false, error: 'This booking can no longer be cancelled.' }
     b.cancellationRequested = true
+    notify(data, b.customerId, { at: demoNowStamp(), category: 'Bookings', title: 'Cancellation requested', body: `${b.id}: staff will review your request and contact you about any refund.`, link: `/app/trips/${b.id}` })
     set({ data })
     return { ok: true, value: undefined }
   },
@@ -383,6 +438,36 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     data.customRequests.push(r)
     notify(data, s.customerId, { at, category: 'Requests', title: 'Custom trip request sent', body: `${r.id} · ${dest.name}. We’ll let you know when your proposal is ready.`, link: `/app/custom/${r.id}` })
     set({ data, drafts: { ...s.drafts, custom: undefined } })
+    return ok(r)
+  },
+
+  submitPlannedTrip: ({ answers: a, plan, contactName, contactMobile }) => {
+    const s = get()
+    if (!s.customerId) return fail('Please log in to send your request.')
+    const bad = firstInvalid(a)
+    if (bad) return fail('Some answers are missing. Go back and finish the questions first.')
+    if (contactName.trim().length < 2) return fail('Enter a contact name.')
+    if (!/^(09|\+639)\d{9}$/.test(contactMobile.replace(/[\s-]/g, ''))) return fail('Use the format 09XX XXX XXXX for the mobile number.')
+    const data = structuredClone(s.data)
+    const dest = requestDestination(data, { destinationId: plan.destinationId, destinationName: plan.destinationName })
+    const trip = toPlannedTrip(plan, a)
+    const { startDate, endDate } = requestDates(a)
+    const b = budgetOf(a)
+    const at = demoNowStamp()
+    const notes = [a.prefs.notes.trim(), a.prefs.mustVisit.trim() && `Must visit: ${a.prefs.mustVisit.trim()}`, a.prefs.accessibility.trim() && `Accessibility: ${a.prefs.accessibility.trim()}`, a.prefs.dietary.trim() && `Dietary: ${a.prefs.dietary.trim()}`].filter(Boolean).join(' · ')
+    const r: CustomRequest = {
+      id: nextId(data, 'customRequest'), customerId: s.customerId, destinationId: dest.id, destinationName: dest.id ? undefined : dest.name, startDate, endDate,
+      flexibility: a.dates.mode === 'exact' ? 'Exact dates' : a.dates.mode === 'flexible' ? 'Flexible dates' : 'Dates to be decided',
+      groupSize: a.group.size, pickup: pickupLabel(a),
+      // Budget per person, as the request form stores it. "Help me estimate" sends the estimate as the ceiling, never zero.
+      budgetMin: 0, budgetMax: b ? b.perPerson : trip.perPerson,
+      interests: plannerInterests(a.interests), requests: notes, contactName: contactName.trim(), contactMobile: contactMobile.trim(),
+      planMode: 'suggested', stops: trip.stops.map((x) => x.name), pace: trip.pace, plan: trip,
+      status: 'Submitted', createdAt: at, events: [{ at, status: 'Submitted', note: 'Trip request sent. TAMS-AP will review your plan and prepare a proposal.' }], origin: 'local',
+    }
+    data.customRequests.push(r)
+    notify(data, s.customerId, { at, category: 'Requests', title: 'Trip request sent', body: `${r.id} · ${dest.name}. TAMS-AP will review your plan and prepare a proposal.`, link: `/app/custom/${r.id}` })
+    set({ data })
     return ok(r)
   },
 
@@ -477,6 +562,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     const at = demoNowStamp()
     r.status = 'Under review'
     r.events.push({ at, status: 'Under review', note: `You asked for changes: “${text.trim()}”` })
+    notify(data, r.customerId, { at, category: 'Requests', title: 'Changes requested', body: `${r.id}: staff will revise the ${kind === 'custom' ? 'proposal' : 'quote'} and send it again.`, link: kind === 'custom' ? `/app/custom/${r.id}` : `/app/rentals/${r.id}` })
     set({ data })
     return ok(undefined)
   },
@@ -489,6 +575,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     if (!r || !canTransition(r.status, 'Closed')) return fail('This request can no longer be withdrawn.')
     r.status = 'Closed'
     r.events.push({ at: demoNowStamp(), status: 'Closed', note: 'Withdrawn by you.' })
+    notify(data, r.customerId, { at: demoNowStamp(), category: 'Requests', title: 'Request withdrawn', body: `${r.id} is closed. You can send a new request any time.`, link: kind === 'custom' ? `/app/custom/${r.id}` : `/app/rentals/${r.id}` })
     set({ data })
     return ok(undefined)
   },
@@ -504,11 +591,11 @@ export const useCustomer = create<CustomerState>((set, get) => ({
       const dest = requestDestination(data, r)
       if (r.status === 'Submitted') {
         r.status = 'Under review'
-        r.events.push({ at, status: 'Under review', note: `Staff are checking lodging and guides in ${dest.name}. (Simulated)` })
+        r.events.push({ at, status: 'Under review', note: `Staff are checking lodging and guides in ${dest.name}.` })
       } else if (r.status === 'Under review') {
         r.proposal = draftCustomProposal(r, dest, at)
         r.status = 'Proposal ready'
-        r.events.push({ at, status: 'Proposal ready', note: 'Proposal sent. Review it and accept or request changes. (Simulated)' })
+        r.events.push({ at, status: 'Proposal ready', note: 'Proposal sent. Review it and accept or request changes.' })
         notify(data, r.customerId, { at, category: 'Requests', title: 'Custom trip proposal ready', body: `${r.id}: your ${dest.name} proposal is ready to review.`, link: `/app/custom/${r.id}` })
       } else return fail('Nothing for staff to do on this request.')
       set({ data })
@@ -518,15 +605,84 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     if (!r) return fail('Request not found.')
     if (r.status === 'Submitted') {
       r.status = 'Under review'
-      r.events.push({ at, status: 'Under review', note: 'Staff are checking the route and van availability. (Simulated)' })
+      r.events.push({ at, status: 'Under review', note: 'Staff are checking the route and van availability.' })
     } else if (r.status === 'Under review') {
       r.quote = { ...r.estimate, note: 'Confirmed as estimated.', validUntil: addDays(at.slice(0, 10), PROPOSAL_VALID_DAYS), sentAt: at }
       r.status = 'Proposal ready'
-      r.events.push({ at, status: 'Proposal ready', note: `Quote sent: ${peso(r.quote.total)}. Accept it to continue to payment. (Simulated)` })
+      r.events.push({ at, status: 'Proposal ready', note: `Quote sent: ${peso(r.quote.total)}. Accept it to continue to payment.` })
       notify(data, r.customerId, { at, category: 'Requests', title: 'Van rental quote ready', body: `${r.id}: your quote is ${peso(r.quote.total)}.`, link: `/app/rentals/${r.id}` })
     } else return fail('Nothing for staff to do on this request.')
     set({ data })
     return ok(r.status)
+  },
+
+  /** Presenter shortcut: plays one staff step on a booking, with the notification the customer would get. */
+  simulateBookingStep: (bookingId, step) => {
+    const s = get()
+    const data = structuredClone(s.data)
+    const b = data.bookings.find((x) => x.id === bookingId && x.customerId === s.customerId)
+    if (!b) return fail('Booking not found.')
+    if (!staffSteps(data, b).includes(step)) return fail('That step is not available for this booking right now.')
+    const svc = data.services.find((x) => x.id === b.serviceId)!
+    const title = b.label ?? svc.name
+    const at = demoNowStamp()
+    const link = `/app/trips/${b.id}`
+    const pending = data.payments.find((p) => p.bookingId === b.id && p.status === 'Submitted')
+    switch (step) {
+      case 'verify': {
+        pending!.status = 'Verified'
+        pending!.reviewedAt = at
+        const m = money(b, data.payments)
+        notify(data, b.customerId, { at, category: 'Payments', title: 'Payment verified', body: `${peso(pending!.amount)} for ${b.id}. ${m.balance > 0 ? `Balance ${peso(m.balance)}.` : 'Fully paid.'}`, link })
+        break
+      }
+      case 'reject':
+        pending!.status = 'Rejected'
+        pending!.reviewedAt = at
+        pending!.rejectReason = 'The reference number does not match the receipt. Please check it and send the proof again.'
+        notify(data, b.customerId, { at, category: 'Payments', title: 'Payment needs a new proof', body: `${b.id}: ${pending!.rejectReason}`, link })
+        break
+      case 'confirm':
+        b.status = 'Confirmed'
+        b.confirmedAt = at
+        notify(data, b.customerId, { at, category: 'Bookings', title: 'Booking confirmed', body: `${b.id} · ${title}, ${shortRange(b.startDate, b.endDate)}. Your seats are secured.`, link })
+        break
+      case 'assign': {
+        const t = assignableTargets(data).find((x) => (b.departureId ? x.kind === 'departure' && x.id === b.departureId : x.kind === 'booking' && x.id === b.id))!
+        const v = data.vehicles.find((x) => !vehicleConflict(data, x, t))
+        const dr = data.drivers.find((x) => !driverConflict(data, x, t))
+        if (!v || !dr) return fail('No van and driver are free on these dates.')
+        data.assignments.push({ id: nextId(data, 'assignment'), target: { kind: t.kind, id: t.id }, from: t.from, to: t.to, vehicleId: v.id, driverId: dr.id, origin: 'local' })
+        notify(data, b.customerId, { at, category: 'Travel', title: 'Van and driver assigned', body: `${title}: ${v.name} (${v.plate}) with ${dr.name}.`, link })
+        break
+      }
+      case 'remind': {
+        const m = money(b, data.payments)
+        notify(data, b.customerId, {
+          at, category: 'Travel', title: 'Trip reminder',
+          body: `${title} on ${shortRange(b.startDate, b.endDate)}. Pickup ${b.rental ? b.rental.pickup : svc.pickup}.${m.balance > 0 ? ` Balance of ${peso(m.balance)} is due before the trip.` : ''}`, link,
+        })
+        break
+      }
+      case 'approveCancel':
+        b.status = 'Cancelled'
+        b.cancelledAt = at
+        b.cancelReason = 'Cancelled at your request'
+        b.cancellationRequested = false
+        data.assignments = data.assignments.filter((a) => !(a.target.kind === 'booking' && a.target.id === b.id))
+        notify(data, b.customerId, { at, category: 'Bookings', title: 'Booking cancelled', body: `${b.id} · ${title}. Staff will contact you about any refund.`, link })
+        break
+      case 'declineCancel':
+        b.cancellationRequested = false
+        notify(data, b.customerId, { at, category: 'Bookings', title: 'Cancellation not approved', body: `${b.id} stays booked. The trip is too close to change; message staff if you need help.`, link })
+        break
+      case 'complete':
+        b.status = 'Completed'
+        notify(data, b.customerId, { at, category: 'Bookings', title: 'Trip completed', body: `Thanks for travelling with us on ${title}!${b.rental || b.serviceId === 'SVC-CUSTOM' ? '' : ' Rate your trip to help other travellers.'}`, link: b.rental || b.serviceId === 'SVC-CUSTOM' ? link : '/app/reviews' })
+        break
+    }
+    set({ data })
+    return ok(STEP_DONE[step])
   },
 
   // ---------- Assistant and messages ----------
@@ -536,6 +692,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     set({ chat: [...chat, { ...entry, id: (chat.at(-1)?.id ?? 0) + 1 }] })
   },
   clearChat: () => set({ chat: [] }),
+  removeChat: (id) => set({ chat: get().chat.filter((m) => m.id !== id) }),
 
   escalate: ({ subject, text, relatedRef }) => {
     const s = get()
@@ -549,6 +706,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
       messages: [{ from: 'customer', at, text: text.trim() }], origin: 'local',
     }
     data.inquiries.push(q)
+    notify(data, s.customerId, { at, category: 'Messages', title: 'Question sent to staff', body: `${q.id} · ${q.subject}. Staff reply here and in Messages.`, link: `/app/messages/${q.id}` })
     set({ data })
     return ok(q)
   },
@@ -620,6 +778,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
       origin: 'local',
     }
     data.reviews.unshift(review)
+    notify(data, me.id, { at: review.createdAt, category: 'Bookings', title: 'Review posted', body: `Thanks for rating your trip. Your review is now on the tour page.`, link: `/app/tours/${trip.serviceId}` })
     set({ data })
     return ok(review)
   },

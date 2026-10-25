@@ -1,6 +1,6 @@
 import { CheckCircle2, Minus, Plus } from 'lucide-react'
 import { useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { balanceDueDate, departureAvailability, downPayment, money, promoFor, rentalDays } from '../../domain/rules'
 import { DEMO_TODAY } from '../../lib/demoClock'
 import { fmtDate, fmtRange, fmtTime, peso } from '../../lib/format'
@@ -151,7 +151,7 @@ export function BookingForm() {
               onChange={(e) => setContact({ ...contact, mobile: e.target.value })}
               onBlur={() => setErrors((x) => ({ ...x, mobile: mobileError(contact.mobile) }))}
               error={errors.mobile}
-              hint="Sample number. No messages are sent."
+              hint="Staff use this number about your booking."
             />
             <TextArea label="Notes (optional)" maxLength={300} value={contact.notes} onChange={(e) => setContact({ ...contact, notes: e.target.value })} placeholder="Seat preferences, dietary needs" />
             <Button size="lg" full onClick={toReview}>
@@ -264,9 +264,6 @@ export function BookingReceived() {
           </LinkButton>
         </div>
       </Card>
-      <p className="mt-4 text-center text-xs text-ink-3">
-        This booking exists only in the customer demo. <Link to="/" className="underline">Demo start</Link>
-      </p>
     </div>
   )
 }

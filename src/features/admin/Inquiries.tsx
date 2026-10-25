@@ -78,7 +78,7 @@ export function AdminInquiries() {
                     <p>{m.text}</p>
                     <p className={`mt-1 text-[11px] ${m.from === 'staff' ? 'text-brand-100' : 'text-ink-3'}`}>
                       {fmtStamp(m.at)}
-                      {m.simulated && ' · recorded in demo, not sent'}
+                      
                     </p>
                   </div>
                 ))}
@@ -99,7 +99,7 @@ export function AdminInquiries() {
                 <div className="mt-2 flex flex-wrap justify-end gap-2">
                   {q.sampleReply && q.status === 'Awaiting staff' && (
                     <Button variant="secondary" onClick={() => setText(q.sampleReply!)}>
-                      Insert scripted reply
+                      Insert suggested reply
                     </Button>
                   )}
                   {q.status !== 'Resolved' && (
@@ -119,7 +119,7 @@ export function AdminInquiries() {
                       if (!r.ok) return setError(r.error)
                       setText('')
                       setError('')
-                      toast('Reply recorded in the demo. No message was sent.', 'info')
+                      toast('Reply saved to the conversation.')
                     }}
                   >
                     Record reply

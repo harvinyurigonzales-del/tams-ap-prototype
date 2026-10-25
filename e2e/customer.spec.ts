@@ -11,7 +11,7 @@ test('customer walkthrough C1–C10', async ({ page }) => {
   await page.getByLabel('Password', { exact: true }).fill('wrong-password')
   await page.getByRole('button', { name: 'Log in', exact: true }).click()
   await expect(page.getByText('Email or password is incorrect.')).toBeVisible()
-  await page.getByRole('button', { name: 'Use demo account' }).click()
+  await page.getByRole('button', { name: 'Use sample account' }).click()
   await expect(page.getByText('Hello, Maria')).toBeVisible()
   // The featured promo tour shows its date and seats; other cards show their next open departure.
   await expect(page.getByText('8 seats left').first()).toBeVisible()

@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { Route, Routes, useLocation } from 'react-router-dom'
-import { UpdatePrompt } from '../pwa/UpdatePrompt'
 import { Toaster } from '../ui/Toaster'
 import { AdminRoutes } from '../features/admin/AdminRoutes'
 import { CustomerRoutes } from '../features/customer/CustomerRoutes'
@@ -23,7 +22,6 @@ export function App() {
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Toaster />
-      <UpdatePrompt />
     </>
   )
 }

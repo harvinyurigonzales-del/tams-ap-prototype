@@ -14,7 +14,13 @@ import { TextField } from '../../ui/Field'
 import { Picture } from '../../ui/Picture'
 import { emailError, mobileError, nameError, newPasswordError, passwordError, sleep } from '../../ui/validate'
 
-const safeNext = (n: string | null) => (n && n.startsWith('/app') && !n.startsWith('/app/login') && !n.startsWith('/app/signup') ? n : '/app')
+/** Main tabs a guest gets bounced from; logging in from one of them starts on Home instead. */
+const TAB_PAGES = ['/app/trips', '/app/account', '/app/saved', '/app/messages', '/app/notifications', '/app/preferences']
+/** Where to go after login: back into a task the guest started (booking, request, saving), otherwise Home. */
+const safeNext = (n: string | null) => {
+  if (!n || !n.startsWith('/app') || n.startsWith('/app/login') || n.startsWith('/app/signup')) return '/app'
+  return TAB_PAGES.includes(n.replace(/\/$/, '')) ? '/app' : n
+}
 
 export function PasswordToggle({ shown, onToggle }: { shown: boolean; onToggle: () => void }) {
   return (
@@ -168,10 +174,9 @@ function GoogleSignIn({ next, label }: { next: string; label: string }) {
       >
         <GoogleG /> {label}
       </button>
-      <Dialog open={info} onClose={() => setInfo(false)} title="Google sign-in isn’t connected yet">
-        <p>This prototype is ready for Google sign-in, but it hasn’t been given a Google client ID, so it can’t talk to Google. Nothing was sent and no account was signed in.</p>
-        <p className="mt-3">To try the app now, use the demo account or create a demo account with an email and password.</p>
-        <p className="mt-3 text-xs text-ink-3">For the team: setup steps are in docs/google-sign-in.md in the project repository.</p>
+      <Dialog open={info} onClose={() => setInfo(false)} title="Google sign-in isn’t available yet">
+        <p>Signing in with Google isn’t available yet, so you haven’t been signed in.</p>
+        <p className="mt-3">Log in with your email and password, or create an account.</p>
       </Dialog>
     </>
   )
@@ -192,13 +197,12 @@ function DemoAccounts({ busy, onUse }: { busy: boolean; onUse: (who: 'maria' | '
   return (
     <section className="mt-6 rounded-2xl border border-dashed border-line-strong bg-surface-muted/60 p-4" aria-labelledby="demo-title">
       <p id="demo-title" className="flex items-center gap-2 text-sm font-semibold text-ink">
-        <span className="rounded-full bg-sili-50 px-2 py-0.5 text-[11px] font-bold tracking-wide text-sili-600 uppercase">Demo</span>
-        Presenting the prototype?
+        Try it with a sample account
       </p>
-      <p className="mt-1 text-xs text-ink-2">Sign in as a fictional customer. No real account is used.</p>
+      <p className="mt-1 text-xs text-ink-2">Sign in as one of our sample customers in one tap.</p>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <Button variant="secondary" disabled={busy} onClick={() => onUse('maria')}>
-          Use demo account
+          Use sample account
         </Button>
         <Button variant="ghost" disabled={busy} onClick={() => onUse('paolo')}>
           New customer (Paolo)
@@ -328,7 +332,7 @@ export function Signup() {
     email: emailError(f.email),
     mobile: mobileError(f.mobile),
     password: newPasswordError(f.password),
-    terms: f.terms ? '' : 'Please accept the sample terms to continue.',
+    terms: f.terms ? '' : 'Please accept the terms to continue.',
   })
 
   const submit = async (e: FormEvent) => {
@@ -342,7 +346,7 @@ export function Signup() {
     const r = signup(f)
     setBusy(false)
     if (!r.ok) return setFormError(r.error)
-    toast('Account created for this demo session.')
+    toast('Account created. Welcome to TAMS AP!')
     navigate(next, { replace: true })
   }
 
@@ -388,14 +392,13 @@ export function Signup() {
             <span>
               I agree to the{' '}
               <button type="button" className="font-semibold text-brand-700 hover:underline" onClick={() => setTerms(true)}>
-                sample terms
+                terms
               </button>
               .
             </span>
           </label>
           {errors.terms && <p className="mt-1.5 text-xs font-medium text-bad">{errors.terms}</p>}
         </div>
-        <p className="rounded-xl bg-info-bg px-3.5 py-2.5 text-xs text-info">Use made-up details. Demo accounts last until you reset or reload the prototype.</p>
         {formError && (
           <p role="alert" className="rounded-xl bg-bad-bg px-3.5 py-2.5 text-sm font-medium text-bad">
             {formError}
@@ -405,11 +408,9 @@ export function Signup() {
           {busy ? 'Creating account…' : 'Create account'}
         </Button>
       </form>
-      <Dialog open={terms} onClose={() => setTerms(false)} title="Sample terms">
+      <Dialog open={terms} onClose={() => setTerms(false)} title="Terms">
         <ul className="list-disc space-y-1.5 pl-5">
-          <li>This is a student prototype with fictional data. No real bookings, payments or messages are made.</li>
-          <li>A 50% down payment holds a booking; the balance is due 3 days before travel (sample policy).</li>
-          <li>Accounts and bookings exist only in this browser tab and are removed by Reset Demo or a reload.</li>
+          <li>A 50% down payment holds a booking; the balance is due 3 days before travel.</li>
         </ul>
       </Dialog>
     </AuthLayout>
@@ -452,7 +453,7 @@ export function ForgotPassword() {
           <p className="flex items-center gap-2 font-semibold text-ok">
             <MailCheck className="size-5" aria-hidden /> Request received for {email}
           </p>
-          <p className="mt-2">If an account exists for this address, it would get a link to set a new password. This prototype doesn’t send emails, so use the demo account on the log-in page.</p>
+          <p className="mt-2">If an account exists for this address, it would get a link to set a new password. Password reset emails aren’t available yet. If you can’t log in, message our staff from the trip desk number on our site.</p>
         </div>
       ) : (
         <form onSubmit={submit} noValidate className="space-y-4" aria-busy={busy}>

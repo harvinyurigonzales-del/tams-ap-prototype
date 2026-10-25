@@ -1,5 +1,5 @@
 import { addDays, daysBetween, DEMO_TODAY, dateOf, overlaps } from '../lib/demoClock'
-import type { Assignment, Booking, Dataset, Departure, Driver, Payment, PaymentSummary, Service, Vehicle } from '../seed/types'
+import type { Assignment, Block, Booking, Dataset, Departure, Driver, Payment, PaymentSummary, Service, Vehicle } from '../seed/types'
 
 // Business rules R1–R14 from the spec. All functions are pure so screens, dashboard and reports agree.
 
@@ -137,13 +137,17 @@ export function shortRange(from: string, to: string) {
   return from.slice(0, 7) === to.slice(0, 7) ? `${shortDate(from)}\u2013${+to.slice(8, 10)}` : `${shortDate(from)}\u2013${shortDate(to)}`
 }
 
+/** Last day a block keeps a van out. Open maintenance runs on past its end date until staff confirm it is done. */
+export const blockEnd = (b: Block, today = DEMO_TODAY) => (b.untilDone && b.to < today ? today : b.to)
+export const blockOverlaps = (b: Block, from: string, to: string) => overlaps(b.from, blockEnd(b), from, to)
+
 /** Why a van cannot take this trip, or null when it can. */
 export function vehicleConflict(d: Dataset, v: Vehicle, t: AssignTarget): string | null {
   if (v.seats < t.pax) return `Only ${v.seats} seats for ${t.pax} passengers`
   for (const blk of v.blocks) {
-    if (overlaps(blk.from, blk.to, t.from, t.to)) {
+    if (blockOverlaps(blk, t.from, t.to)) {
       return blk.kind === 'maintenance'
-        ? `In maintenance ${shortRange(blk.from, blk.to)}`
+        ? blk.untilDone && blk.to < DEMO_TODAY ? 'Maintenance overdue, not yet confirmed done' : `In maintenance ${shortRange(blk.from, blk.to)}`
         : `Unavailable until ${shortDate(blk.to)}`
     }
   }
@@ -166,7 +170,7 @@ export function driverConflict(d: Dataset, dr: Driver, t: AssignTarget): string 
 
 /** Current status of a van on a given day, for the fleet lists. */
 export function vehicleStatusOn(d: Dataset, v: Vehicle, day = DEMO_TODAY) {
-  const blk = v.blocks.find((b) => overlaps(b.from, b.to, day, day))
+  const blk = v.blocks.find((b) => blockOverlaps(b, day, day))
   if (blk) return blk.kind === 'maintenance' ? 'Maintenance' : 'Unavailable'
   return d.assignments.some((a) => a.vehicleId === v.id && overlaps(a.from, a.to, day, day)) ? 'On a trip' : 'Available'
 }

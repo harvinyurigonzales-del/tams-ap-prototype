@@ -1,11 +1,14 @@
-import { Bell, CalendarDays, CarFront, ClipboardList, CreditCard, Inbox, LayoutDashboard, LogOut, Menu, MessageSquare, PieChart, Settings as SettingsIcon, Star, UserRound, Users, X } from 'lucide-react'
+import { Bell, Bot, CalendarDays, CarFront, ClipboardList, CreditCard, Inbox, LayoutDashboard, Lock, LogOut, Map as MapIcon, Menu, MessageSquare, PieChart, Settings as SettingsIcon, ShieldCheck, Star, UserRound, Users, Wrench, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { NotFound } from '../../app/NotFound'
 import { DEMO_TODAY } from '../../lib/demoClock'
 import { fmtDate } from '../../lib/format'
 import { needsReply } from '../../domain/reviews'
-import { useAdmin } from '../../state/adminStore'
+import { useAdmin, useIsAdmin, useMe } from '../../state/adminStore'
+import { usePresenter } from '../../state/presenter'
+import { LinkButton } from '../../ui/Button'
+import { Card } from '../../ui/Card'
 import type { Dataset } from '../../seed/types'
 import { BrandMark } from '../../ui/BrandMark'
 import { ConfirmDialog } from '../../ui/Dialog'
@@ -15,6 +18,10 @@ import { Calendar } from './Calendar'
 import { Customers } from './Customers'
 import { Dashboard } from './Dashboard'
 import { Drivers, Vehicles } from './Fleet'
+import { Maintenance, overdueCount } from './Maintenance'
+import { Packages } from './Packages'
+import { StaffAccounts } from './Staff'
+import { ManageChatbot } from './Chatbot'
 import { AdminInquiries } from './Inquiries'
 import { AdminNotifications } from './Notifications'
 import { Payments } from './Payments'
@@ -43,11 +50,15 @@ export function AdminRoutes() {
           <Route path="requests" element={<AdminRequests />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="customers" element={<Customers />} />
-          <Route path="reports" element={<Reports />} />
+          <Route path="reports" element={<AdminOnly title="Reports"><Reports /></AdminOnly>} />
           <Route path="notifications" element={<AdminNotifications />} />
           <Route path="inquiries" element={<AdminInquiries />} />
           <Route path="vehicles" element={<Vehicles />} />
           <Route path="drivers" element={<Drivers />} />
+          <Route path="maintenance" element={<Maintenance />} />
+          <Route path="packages" element={<AdminOnly title="Tour packages"><Packages /></AdminOnly>} />
+          <Route path="staff" element={<AdminOnly title="Staff accounts"><StaffAccounts /></AdminOnly>} />
+          <Route path="chatbot" element={<AdminOnly title="Manage chatbot"><ManageChatbot /></AdminOnly>} />
           <Route path="reviews" element={<AdminReviews />} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<NotFound home="/admin" homeLabel="Back to dashboard" />} />
@@ -57,7 +68,27 @@ export function AdminRoutes() {
   )
 }
 
-/** Client-side guard that demonstrates the intended behaviour. It is not security. */
+/** Admin-only module. Staff who open its link directly see why it is locked instead of the page. */
+function AdminOnly({ title, children }: { title: string; children: React.ReactNode }) {
+  const admin = useIsAdmin()
+  if (admin) return <>{children}</>
+  return (
+    <div className="mx-auto max-w-md pt-6">
+      <Card className="p-6 text-center">
+        <span className="mx-auto grid size-12 place-items-center rounded-full bg-brand-50 text-brand-700">
+          <Lock className="size-6" aria-hidden />
+        </span>
+        <h1 className="mt-3 font-display text-xl font-bold text-charcoal">Admin only</h1>
+        <p className="mt-1 text-sm text-ink-2">{title} is available to admin accounts. Ask an admin if you need something changed here.</p>
+        <LinkButton to="/admin" className="mt-5">
+          Back to dashboard
+        </LinkButton>
+      </Card>
+    </div>
+  )
+}
+
+/** Client-side guard. Real access control belongs on the server. */
 function RequireAdmin() {
   const loggedIn = useAdmin((s) => s.loggedIn)
   const loc = useLocation()
@@ -65,7 +96,7 @@ function RequireAdmin() {
   return <Outlet />
 }
 
-type NavItem = { to: string; label: string; icon: typeof LayoutDashboard; end?: boolean; count?: (d: Dataset) => number }
+type NavItem = { to: string; label: string; icon: typeof LayoutDashboard; end?: boolean; count?: (d: Dataset) => number; adminOnly?: boolean }
 
 // Grouped by the job staff are doing, with a count only where something is waiting on them.
 const GROUPS: { title?: string; items: NavItem[] }[] = [
@@ -89,15 +120,19 @@ const GROUPS: { title?: string; items: NavItem[] }[] = [
   {
     title: 'Business',
     items: [
-      { to: '/admin/reports', label: 'Reports', icon: PieChart },
+      { to: '/admin/reports', label: 'Reports', icon: PieChart, adminOnly: true },
+      { to: '/admin/packages', label: 'Tour packages', icon: MapIcon, adminOnly: true },
       { to: '/admin/vehicles', label: 'Vehicles', icon: CarFront },
       { to: '/admin/drivers', label: 'Drivers', icon: UserRound },
+      { to: '/admin/maintenance', label: 'Maintenance', icon: Wrench },
     ],
   },
   {
     title: 'System',
     items: [
       { to: '/admin/notifications', label: 'Notifications', icon: Bell, count: (d) => d.notifications.filter((n) => !n.read).length },
+      { to: '/admin/staff', label: 'Staff accounts', icon: ShieldCheck, adminOnly: true },
+      { to: '/admin/chatbot', label: 'Manage chatbot', icon: Bot, adminOnly: true },
       { to: '/admin/settings', label: 'Settings', icon: SettingsIcon },
     ],
   },
@@ -108,14 +143,17 @@ function Shell() {
   const [out, setOut] = useState(false)
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const { data, logout } = useAdmin()
+  const { data, logout, maintenance } = useAdmin()
+  const me = useMe()
+  const admin = me?.role === 'Admin'
+  const presenter = usePresenter()
   const unread = data.notifications.filter((n) => !n.read).length
   useEffect(() => {
     setDrawer(false)
   }, [pathname])
 
   const link = (n: NavItem) => {
-    const count = n.count?.(data) ?? 0
+    const count = n.to === '/admin/maintenance' ? overdueCount(maintenance) : (n.count?.(data) ?? 0)
     return (
       <NavLink
         key={n.to}
@@ -156,14 +194,16 @@ function Shell() {
         {GROUPS.map((g, i) => (
           <div key={i} className={i ? 'mt-5' : ''}>
             {g.title && <p className="mb-1 px-3 text-[11px] font-semibold tracking-[0.12em] text-white/50 uppercase">{g.title}</p>}
-            <div className="flex flex-col gap-0.5">{g.items.map(link)}</div>
+            <div className="flex flex-col gap-0.5">{g.items.filter((n) => admin || !n.adminOnly).map(link)}</div>
           </div>
         ))}
       </nav>
       <div className="mt-auto space-y-0.5 border-t border-white/10 pt-4">
-        <Link to="/" className="block rounded-lg px-3 py-2 text-xs font-medium text-white/65 hover:bg-white/6 hover:text-white">
-          ← Demo start
-        </Link>
+        {presenter && (
+          <Link to="/" className="block rounded-lg px-3 py-2 text-xs font-medium text-white/65 hover:bg-white/6 hover:text-white">
+            ← Presenter start page
+          </Link>
+        )}
         <button onClick={() => setOut(true)} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-white/75 hover:bg-white/6 hover:text-white">
           <LogOut className="size-[18px]" aria-hidden /> Log out
         </button>
@@ -196,13 +236,15 @@ function Shell() {
                 {unread > 0 && <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-sili ring-2 ring-surface" />}
               </Link>
               <span className="mx-1 h-6 w-px bg-line" aria-hidden />
-              <span className="grid size-9 place-items-center rounded-full bg-navy font-display text-sm font-bold text-white" aria-hidden>
-                A
-              </span>
-              <span className="hidden text-sm leading-tight sm:block">
-                <span className="block font-semibold text-ink">Demo admin</span>
-                <span className="block text-xs text-ink-2">Operations</span>
-              </span>
+              <Link to="/admin/settings?tab=account" className="flex items-center gap-2 rounded-xl p-1 pr-2 hover:bg-brand-50" aria-label={`Account settings, ${me?.name ?? ''} (${me?.role ?? ''})`}>
+                <span className="grid size-9 place-items-center rounded-full bg-navy font-display text-sm font-bold text-white" aria-hidden>
+                  {initials(me?.name ?? '')}
+                </span>
+                <span className="hidden text-sm leading-tight sm:block" aria-hidden>
+                  <span className="block font-semibold text-ink">{me?.name}</span>
+                  <span className="block text-xs text-ink-2">{me?.role}</span>
+                </span>
+              </Link>
             </div>
           </header>
           <main className="mx-auto max-w-[1360px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -216,7 +258,7 @@ function Shell() {
         open={out}
         onClose={() => setOut(false)}
         title="Log out?"
-        body="Changes made in the admin demo stay until you reset or reload."
+        body="You can log back in with your work email and password."
         confirmLabel="Log out"
         onConfirm={() => {
           logout()
@@ -226,6 +268,14 @@ function Shell() {
     </div>
   )
 }
+
+export const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join('')
 
 /** Page heading used on every admin screen. */
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: React.ReactNode }) {

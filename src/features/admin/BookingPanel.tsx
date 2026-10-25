@@ -114,7 +114,7 @@ export function BookingPanel({ bookingId, onClose }: { bookingId: string; onClos
             {b.status !== 'Cancelled' && m.balance > 0 && <p className="text-xs text-ink-2">Balance due {fmtDate(m.dueDate, { weekday: true })}</p>}
             {b.status === 'Cancelled' && (
               <p className="mt-2 rounded-lg bg-bad-bg px-3 py-2 text-xs text-bad">
-                Cancelled{b.cancelledAt ? ` ${fmtStamp(b.cancelledAt)}` : ''}: {b.cancelReason}. Refund handled outside the prototype.
+                Cancelled{b.cancelledAt ? ` ${fmtStamp(b.cancelledAt)}` : ''}: {b.cancelReason}. Refunds are handled separately.
               </p>
             )}
           </section>
@@ -292,7 +292,7 @@ export function BookingPanel({ bookingId, onClose }: { bookingId: string; onClos
         open={cancel}
         onClose={() => setCancel(false)}
         title="Cancel this booking?"
-        body="Seats are released right away. Verified payments stay in collections; refunds are handled outside the prototype."
+        body="Seats are released right away. Verified payments stay in collections; refunds are handled separately."
         confirmLabel="Cancel booking"
         tone="danger"
         onConfirm={() => {

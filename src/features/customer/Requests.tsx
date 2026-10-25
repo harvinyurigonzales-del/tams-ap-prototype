@@ -5,7 +5,8 @@ import { requestStatusLabel } from '../../domain/requests'
 import { money } from '../../domain/rules'
 import { peso } from '../../lib/format'
 import { useAssistant } from '../../state/assistant'
-import { useCustomer } from '../../state/customerStore'
+import { STEP_LABEL, staffSteps, useCustomer } from '../../state/customerStore'
+import { usePresenter } from '../../state/presenter'
 import { useUi } from '../../state/ui'
 import type { Booking, PriceLine, RequestEvent, RequestStatus } from '../../seed/types'
 import { SampleTag, StatusBadge } from '../../ui/Badge'
@@ -157,29 +158,62 @@ export function WithdrawButton({ kind, id }: { kind: 'custom' | 'rental'; id: st
   )
 }
 
-/** Presenter control that plays the staff side forward, clearly marked as a demo shortcut. */
+/** Presenter shortcut that plays the staff side forward. Shown only in presenter mode. */
 export function SimulateStaff({ kind, id, status }: { kind: 'custom' | 'rental'; id: string; status: RequestStatus }) {
   const simulate = useCustomer((s) => s.simulateStaffUpdate)
   const toast = useUi((s) => s.toast)
-  if (status !== 'Submitted' && status !== 'Under review') return null
+  const presenter = usePresenter((s) => s.on)
+  if (!presenter || (status !== 'Submitted' && status !== 'Under review')) return null
   const doc = kind === 'rental' ? 'quote' : 'proposal'
   return (
     <div className="rounded-2xl border border-dashed border-line-strong p-4">
       <p className="flex items-center gap-1.5 text-xs font-semibold text-ink-2">
-        <FlaskConical className="size-4" aria-hidden /> Demo control
+        <FlaskConical className="size-4" aria-hidden /> Presenter shortcut
       </p>
-      <p className="mt-1 text-xs text-ink-2">In the real system staff do this from the admin side. This button plays their next step so you can continue the demo.</p>
+      <p className="mt-1 text-xs text-ink-2">Plays the staff team’s next step on this request.</p>
       <Button
         size="sm"
         variant="secondary"
         className="mt-2"
         onClick={() => {
           const r = simulate(kind, id)
-          if (r.ok) toast(r.value === 'Under review' ? 'Simulated: staff started reviewing.' : `Simulated: staff sent the ${doc}.`, 'info')
+          if (r.ok) toast(r.value === 'Under review' ? 'Staff started reviewing.' : `Staff sent the ${doc}.`, 'info')
         }}
       >
         {status === 'Submitted' ? 'Simulate staff review' : `Simulate staff ${doc}`}
       </Button>
+    </div>
+  )
+}
+
+/** Presenter shortcut for bookings: plays the staff team's next step so the whole journey can be shown from the customer side. */
+export function SimulateBooking({ booking }: { booking: Booking }) {
+  const { data, simulateBookingStep } = useCustomer()
+  const toast = useUi((s) => s.toast)
+  const presenter = usePresenter((s) => s.on)
+  const steps = staffSteps(data, booking)
+  if (!presenter || steps.length === 0) return null
+  return (
+    <div className="rounded-2xl border border-dashed border-line-strong p-4">
+      <p className="flex items-center gap-1.5 text-xs font-semibold text-ink-2">
+        <FlaskConical className="size-4" aria-hidden /> Presenter shortcut
+      </p>
+      <p className="mt-1 text-xs text-ink-2">Plays what the staff team does next. Each step sends the customer a notification.</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {steps.map((st) => (
+          <Button
+            key={st}
+            size="sm"
+            variant={st === 'reject' || st === 'declineCancel' ? 'ghost' : 'secondary'}
+            onClick={() => {
+              const r = simulateBookingStep(booking.id, st)
+              toast(r.ok ? r.value : r.error, r.ok ? 'info' : 'error')
+            }}
+          >
+            {STEP_LABEL[st]}
+          </Button>
+        ))}
+      </div>
     </div>
   )
 }

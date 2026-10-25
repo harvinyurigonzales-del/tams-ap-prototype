@@ -13,7 +13,7 @@ export function Saved() {
   return (
     <div>
       <h1 className="type-head text-[32px] text-charcoal md:text-[40px]">Saved</h1>
-      <p className="mt-1 text-sm text-ink-2">Tours and destinations you saved in this demo session.</p>
+      <p className="mt-1 text-sm text-ink-2">Tours and destinations you saved.</p>
       {saved.length === 0 ? (
         <Card className="mt-5">
           <EmptyState

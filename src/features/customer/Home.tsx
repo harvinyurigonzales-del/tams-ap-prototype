@@ -1,4 +1,4 @@
-import { ArrowUpRight, CalendarDays, ChevronLeft, ChevronRight, CircleDollarSign, MapPin, MessageCircle, Search, Pause, Play, SlidersHorizontal, Sparkles, Ticket, Users, X } from 'lucide-react'
+import { ArrowUpRight, CalendarDays, ChevronLeft, ChevronRight, CircleDollarSign, MapPin, MessageCircle, Search, SlidersHorizontal, Sparkles, Ticket, Users, X } from 'lucide-react'
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { availableMoods, departureInWindow } from '../../domain/moods'
@@ -83,7 +83,7 @@ export function Home() {
         <p className="mt-10 flex items-start gap-2 text-xs text-ink-3">
           <SlidersHorizontal className="mt-px size-3.5 shrink-0" aria-hidden />
           <span>
-            Suggestions follow simple rules over your preferences, saved items, pages you opened and past trips in this demo. There is no AI model and nothing is sent anywhere.{' '}
+            Suggestions are based on your travel preferences, saved items, the trips you’ve viewed and your past trips.{' '}
             {customerId && (
               <Link to="/app/preferences" className="font-semibold text-brand-700 underline">
                 Change preferences
@@ -103,8 +103,9 @@ function Hero({ greeting }: { greeting?: string }) {
   const slides = HERO_SLIDES.map((h) => ({ ...h, dest: data.destinations.find((x) => x.id === h.destinationId)! })).filter((h) => h.dest)
   const reduced = usePrefersReducedMotion()
   const [index, setIndex] = useState(0)
-  const [playing, setPlaying] = useState(!reduced)
-  const [held, setHeld] = useState(false) // pointer or focus on the controls or search
+  // Cycles on its own unless reduced motion is on; pauses while the hero has focus or pointer interaction.
+  const playing = !reduced
+  const [held, setHeld] = useState(false) // focus in the hero or search, or a pointer on the controls
   const [hidden, setHidden] = useState(false)
   const [loaded, setLoaded] = useState<Set<number>>(() => new Set())
   const [announce, setAnnounce] = useState(false)
@@ -114,14 +115,13 @@ function Hero({ greeting }: { greeting?: string }) {
   const next = (index + 1) % n
   const running = playing && !held && !hidden && n > 1
 
-  useEffect(() => setPlaying(!reduced), [reduced])
   useEffect(() => {
     if (loaded.has(index)) setVisible(index)
   }, [index, loaded])
   useEffect(() => {
     const onVis = () => setHidden(document.hidden)
     document.addEventListener('visibilitychange', onVis)
-    // Typing in the trip search below the hero also pauses the slideshow.
+    // Focus anywhere in the hero, or typing in the trip search below it, pauses the slideshow.
     const onFocus = (e: FocusEvent) => setHeld(!!(e.target as Element | null)?.closest?.('[data-hero-hold]'))
     document.addEventListener('focusin', onFocus)
     return () => {
@@ -146,7 +146,11 @@ function Hero({ greeting }: { greeting?: string }) {
   const mounted = (i: number) => i === index || i === next || i === (index - 1 + n) % n || loaded.has(i)
 
   return (
-    <section className="relative isolate h-[min(92svh,860px)] min-h-[620px] overflow-hidden bg-charcoal text-white" aria-labelledby="hero-title" aria-roledescription="slideshow">
+    <section
+      data-hero-hold
+      onPointerDown={() => setHeld(true)}
+      onPointerLeave={() => setHeld(document.activeElement?.closest('[data-hero-hold]') != null)}
+      className="relative isolate h-[min(92svh,860px)] min-h-[620px] overflow-hidden bg-charcoal text-white" aria-labelledby="hero-title" aria-roledescription="slideshow">
       <div className="absolute inset-0 -z-10" aria-hidden>
         {slides.map((h, i) =>
           mounted(i) ? (
@@ -192,7 +196,6 @@ function Hero({ greeting }: { greeting?: string }) {
       </div>
 
       <div
-        data-hero-hold
         onPointerEnter={() => setHeld(true)}
         onPointerLeave={() => setHeld(document.activeElement?.closest('[data-hero-hold]') != null)}
         className="absolute right-4 bottom-[112px] left-4 flex items-end justify-between gap-3 sm:right-6 sm:left-auto md:bottom-[84px]"
@@ -208,9 +211,6 @@ function Hero({ greeting }: { greeting?: string }) {
           <div className="flex shrink-0 items-center gap-1 rounded-full bg-black/35 p-1 ring-1 ring-white/15 backdrop-blur-md" role="group" aria-label="Slideshow controls">
             <HeroButton label="Previous photo" onClick={() => go(index - 1)}>
               <ChevronLeft className="size-4" aria-hidden />
-            </HeroButton>
-            <HeroButton label={playing ? 'Pause slideshow' : 'Play slideshow'} pressed={!playing} onClick={() => setPlaying((p) => !p)}>
-              {playing ? <Pause className="size-4" aria-hidden /> : <Play className="size-4" aria-hidden />}
             </HeroButton>
             <span className="px-1 text-[11px] font-semibold text-white/85 tnum" aria-label={`Photo ${index + 1} of ${n}`}>
               {index + 1}/{n}
@@ -562,7 +562,7 @@ function Reassurance() {
           <Link to="/app/messages" className="font-semibold text-brand-700 underline underline-offset-2">
             Messages
           </Link>
-          . Trip desk: {TRIP_DESK.mobile} (sample number).
+          . Trip desk: {TRIP_DESK.mobile}.
         </Assure>
       </ul>
     </section>

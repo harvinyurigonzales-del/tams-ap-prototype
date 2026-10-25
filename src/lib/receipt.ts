@@ -30,8 +30,8 @@ export function demoReceiptSrc(p: { method: PaymentMethod; amount: number; refer
   const rows: [string, string][] = [
     ['Reference no.', p.reference.trim()],
     ['Date', fmtStamp(p.at)],
-    ['Method', `${p.method} (demo)`],
-    ['From', p.from || 'Customer (demo)'],
+    ['Method', p.method],
+    ['From', p.from || 'Customer'],
     ['To', st.to],
     ['Note', p.note],
   ]
@@ -40,15 +40,15 @@ export function demoReceiptSrc(p: { method: PaymentMethod; amount: number; refer
 <path d="M16 0h268a16 16 0 0 1 16 16v72H0V16A16 16 0 0 1 16 0z" fill="${st.band}"/>
 <text x="150" y="40" text-anchor="middle" font-size="17" font-weight="700" fill="#fff">${st.title}</text>
 <text x="150" y="64" text-anchor="middle" font-size="11.5" fill="#fff" fill-opacity=".85">Fictional receipt · not a real transaction</text>
-<text x="150" y="128" text-anchor="middle" font-size="13" fill="#5B5670">Sent to TAMS AP Travel (demo)</text>
+<text x="150" y="128" text-anchor="middle" font-size="13" fill="#5B5670">Sent to TAMS AP Travel</text>
 <text x="150" y="172" text-anchor="middle" font-size="32" font-weight="700" fill="#1E1B2E">${esc(peso(p.amount))}.00</text>
 <line x1="24" y1="200" x2="276" y2="200" stroke="#E4E1EE" stroke-dasharray="4 4"/>
 <g font-size="12.5" fill="#5B5670">${rows
     .map(([k, v], i) => `<text x="24" y="${232 + i * 30}">${k}</text><text x="276" y="${232 + i * 30}" text-anchor="end" fill="#1E1B2E"${i === 0 ? ' font-weight="700"' : ''}>${esc(v)}</text>`)
     .join('')}</g>
 <rect x="24" y="414" width="252" height="58" rx="10" fill="#FFF1D6"/>
-<text x="150" y="439" text-anchor="middle" font-size="12" font-weight="700" fill="#9A5B00">FOR DEMONSTRATION ONLY</text>
-<text x="150" y="457" text-anchor="middle" font-size="11" fill="#9A5B00">No money was sent. Prototype sample.</text>
+<text x="150" y="439" text-anchor="middle" font-size="12" font-weight="700" fill="#9A5B00">SAMPLE RECEIPT</text>
+<text x="150" y="457" text-anchor="middle" font-size="11" fill="#9A5B00">Generated from the payment form.</text>
 </svg>`
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 }
