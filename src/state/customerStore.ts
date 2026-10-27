@@ -3,6 +3,7 @@ import { addDays, DEMO_TODAY, dateOf, daysBetween, demoNowStamp } from '../lib/d
 import { peso } from '../lib/format'
 import type { AssistantAnswer } from '../domain/assistant'
 import { agreedFrom, CUSTOM_PICKUP_TIME, isOffered } from '../domain/packages'
+import { openRefund, releaseResources, selfCancelOpen } from '../domain/paymentPolicy'
 import { recKey, type RecKind } from '../domain/recommend'
 import {
   canTransition, draftCustomProposal, PROPOSAL_VALID_DAYS, proposalExpired, rentalEndDate, rentalEstimate, requestDestination, validateCustom, validateRental,
@@ -379,6 +380,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     const data = structuredClone(s.data)
     const b = data.bookings.find((x) => x.id === bookingId && x.customerId === s.customerId)
     if (!b || (b.status !== 'Pending' && b.status !== 'Confirmed')) return { ok: false, error: 'This booking can no longer be cancelled.' }
+    if (!selfCancelOpen(data, b)) return { ok: false, error: 'Cancellation requests close 72 hours before departure. Please contact staff.' }
     b.cancellationRequested = true
     const at = demoNowStamp()
     notify(data, b.customerId, { at, category: 'Bookings', title: 'Cancellation requested', body: `${b.id}: staff will review your request and contact you about any refund.`, link: `/app/trips/${b.id}` })
@@ -701,9 +703,13 @@ export const useCustomer = create<CustomerState>((set, get) => ({
         b.status = 'Cancelled'
         b.cancelledAt = at
         b.cancelReason = 'Cancelled at your request'
+        b.cancelledBy = 'customer'
         b.cancellationRequested = false
-        data.assignments = data.assignments.filter((a) => !(a.target.kind === 'booking' && a.target.id === b.id))
-        notify(data, b.customerId, { at, category: 'Bookings', title: 'Booking cancelled', body: `${b.id} · ${title}. Staff will contact you about any refund.`, link })
+        releaseResources(data, b)
+        {
+          const refund = openRefund(data, b, at, b.cancelReason, 'customer')
+          notify(data, b.customerId, { at, category: 'Bookings', title: 'Booking cancelled', body: `${b.id} · ${title}.${refund ? ` Your verified payments of ${peso(refund.paid)} are under refund review.` : ' No payment was received, so nothing is refunded.'}`, link })
+        }
         break
       case 'declineCancel':
         b.cancellationRequested = false

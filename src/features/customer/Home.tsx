@@ -5,7 +5,7 @@ import { availableMoods, departureInWindow } from '../../domain/moods'
 import { catalogTours, recommendationRows, type RecItem, type RecRow } from '../../domain/recommend'
 import { priceUnitOf } from '../../domain/packages'
 import { proposalExpired } from '../../domain/requests'
-import { BALANCE_DUE_DAYS_BEFORE, DOWN_PAYMENT_RATE, money, payableOptions, promoFor } from '../../domain/rules'
+import { DOWN_PAYMENT_RATE, money, payableOptions, promoFor } from '../../domain/rules'
 import { DEMO_TODAY } from '../../lib/demoClock'
 import { fmtDate, fmtTime, peso } from '../../lib/format'
 import { useAssistant } from '../../state/assistant'
@@ -519,7 +519,7 @@ function Reassurance() {
           {allVan ? 'Every joiner tour includes a round-trip van with driver and fuel. ' : ''}Meals, hotel nights and entrance fees differ by package, so each tour lists what’s in and what’s not.
         </Assure>
         <Assure icon={<CircleDollarSign className="size-5" aria-hidden />} title="How payment works">
-          A {DOWN_PAYMENT_RATE * 100}% down payment by GCash, Maya or bank transfer holds your booking. Staff verify your receipt, then confirm. The balance is due {BALANCE_DUE_DAYS_BEFORE} days before you leave.
+          A {DOWN_PAYMENT_RATE * 100}% down payment by GCash, Maya or bank transfer holds your booking. Staff verify your receipt, then confirm. The balance is due 72 hours before departure.
         </Assure>
         <Assure icon={<MessageCircle className="size-5" aria-hidden />} title="May tanong? Usap tayo.">
           <button onClick={() => openWith()} className="font-semibold text-brand-700 underline underline-offset-2">

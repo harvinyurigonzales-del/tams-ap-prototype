@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { fmtStamp, peso } from '../../lib/format'
 import { useAdmin } from '../../state/adminStore'
 import type { PaymentStatus } from '../../seed/types'
-import { LocalTag, StatusBadge } from '../../ui/Badge'
+import { Badge, LocalTag, StatusBadge } from '../../ui/Badge'
 import { Card } from '../../ui/Card'
 import { EmptyState } from '../../ui/EmptyState'
 import { PageHeader } from './AdminRoutes'
@@ -77,6 +77,36 @@ export function Payments() {
           })}
         </Table>
         <Pager {...pg} onPage={setPage} />
+      </Card>
+
+      <Card className="mt-6">
+        <div className="border-b border-line p-4">
+          <h2 className="font-display text-lg font-semibold text-ink">Refund reviews</h2>
+          <p className="text-sm text-ink-2">Opened when a booking with verified payments is cancelled. Approving records a decision; money moves only when staff record the transfer.</p>
+        </div>
+        <Table head={['Review', 'Booking', 'Customer', 'Reason', 'Paid', 'Refund', 'Status', '']} empty={data.refunds.length === 0 && <EmptyState title="No refund reviews" body="Cancelled bookings with verified payments appear here." />}>
+          {data.refunds.map((r) => (
+            <tr key={r.id}>
+              <td className={td}>
+                <span className="font-medium text-ink">{r.id}</span>
+                <span className="block text-xs text-ink-2">{fmtStamp(r.createdAt)}</span>
+              </td>
+              <td className={td}>{r.bookingId}</td>
+              <td className={td}>{customerOf(data, r.customerId)?.name}</td>
+              <td className={td}>{r.reason}</td>
+              <td className={`${td} tnum`}>{peso(r.paid)}</td>
+              <td className={`${td} tnum`}>{peso(r.decision ? r.decision.amount : r.proposed)}</td>
+              <td className={td}>
+                <Badge tone={r.status === 'Processed' ? 'ok' : r.status === 'Pending review' ? 'warn' : r.status === 'Approved' ? 'info' : 'neutral'}>{r.status}</Badge>
+              </td>
+              <td className={td}>
+                <Link to={`/admin/bookings?id=${r.bookingId}`} className="font-semibold whitespace-nowrap text-brand-700 hover:underline">
+                  Open
+                </Link>
+              </td>
+            </tr>
+          ))}
+        </Table>
       </Card>
     </div>
   )

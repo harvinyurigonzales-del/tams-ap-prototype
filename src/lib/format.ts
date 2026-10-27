@@ -29,5 +29,10 @@ export function fmtStamp(iso: string) {
   return `${fmtDate(iso.slice(0, 10), { year: false })}, ${fmtTime(iso.slice(11, 16))}`
 }
 
+/** Exact Manila date and time with the weekday and year, for deadlines: "Tue, Dec 8, 2026, 4:00 AM". */
+export function fmtExact(iso: string) {
+  return `${fmtDate(iso.slice(0, 10), { weekday: true })}, ${fmtTime(iso.slice(11, 16))}`
+}
+
 export const monthLabel = (year: number, month0: number) => `${LONG_MONTHS[month0]} ${year}`
 export const shortDay = (i: number) => DAYS[i]

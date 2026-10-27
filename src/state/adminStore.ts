@@ -1,6 +1,6 @@
 import { create } from 'zustand'
-import { addDays, DEMO_TODAY, demoNowStamp } from '../lib/demoClock'
-import { peso } from '../lib/format'
+import { addDays, addHours, DEMO_TODAY, demoNowStamp, isoMs } from '../lib/demoClock'
+import { fmtExact, peso } from '../lib/format'
 import { canTransition, draftCustomProposal, PROPOSAL_VALID_DAYS, requestDestination } from '../domain/requests'
 import { assignableTargets, canCancel, canConfirm, driverConflict, money, shortRange, vehicleConflict } from '../domain/rules'
 import type { MaintenanceRecord } from '../seed/derive'
@@ -8,6 +8,7 @@ import type { AppNotification, CustomRequest, Dataset, Driver, PackageStatus, Pr
 import { changesOf, logActivity } from '../domain/activity'
 import { packageStatus, priceBasisOf, setStatus } from '../domain/packages'
 import { departureAvailability } from '../domain/rules'
+import { deadlinesOf, openRefund, policyNow } from '../domain/paymentPolicy'
 import { nextId } from './ids'
 import { freshState, markSignedOut, readSession, startingState, writeSession } from './persist'
 
@@ -116,6 +117,12 @@ interface AdminState {
   startReview: (kind: 'custom' | 'rental', id: string) => Result
   sendProposal: (kind: 'custom' | 'rental', id: string) => Result
   closeRequest: (kind: 'custom' | 'rental', id: string, reason: string) => Result
+  /** After a rejected payment: gives the customer a final payment cutoff, `hours` from now. */
+  setRevisedCutoff: (bookingId: string, hours: number, note: string) => Result
+  /** Admin decision on a refund review: approve an amount, or record that no refund is due. */
+  decideRefund: (refundId: string, approve: boolean, amount: number, note: string) => Result
+  /** Records that an approved refund was actually sent. */
+  recordRefund: (refundId: string, x: { method: string; reference: string; date: string; note?: string }) => Result
   reset: () => void
 }
 
@@ -186,6 +193,13 @@ const findRequest = (d: Dataset, kind: 'custom' | 'rental', id: string): CustomR
 
 const customerName = (d: Dataset, customerId: string) => d.customers.find((c) => c.id === customerId)?.name ?? customerId
 
+/** A review is stamped at the booking's effective time, so a payment-timeline preview judges it in the moved clock. */
+function reviewStamp(d: Dataset, bookingId: string) {
+  const now = demoNowStamp()
+  const at = policyNow(d, bookingId)
+  return isoMs(at) > isoMs(now) ? at : now
+}
+
 export const useAdmin = create<AdminState>((set, get) => ({
   ...initial(),
 
@@ -222,7 +236,7 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const p = data.payments.find((x) => x.id === paymentId)
     if (!p || p.status !== 'Submitted') return { ok: false, error: 'Only a submitted payment can be verified.' }
     const b = data.bookings.find((x) => x.id === p.bookingId)!
-    const at = demoNowStamp()
+    const at = reviewStamp(data, b.id)
     p.status = 'Verified'
     p.reviewedAt = at
     activity(data, at, {
@@ -241,7 +255,7 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const p = data.payments.find((x) => x.id === paymentId)
     if (!p || p.status !== 'Submitted') return { ok: false, error: 'Only a submitted payment can be rejected.' }
     const b = data.bookings.find((x) => x.id === p.bookingId)!
-    const at = demoNowStamp()
+    const at = reviewStamp(data, b.id)
     p.status = 'Rejected'
     p.reviewedAt = at
     p.rejectReason = reason.trim()
@@ -280,17 +294,24 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const check = canCancel(b)
     if (!check.ok) return { ok: false, error: check.reason }
     const at = demoNowStamp()
+    const byCustomer = !!b.cancellationRequested
     b.status = 'Cancelled'
     b.cancelReason = reason.trim()
     b.cancelledAt = at
+    b.cancelledBy = byCustomer ? 'customer' : 'staff'
     b.cancellationRequested = false
     // A rental's own assignment goes; a departure keeps its van while other confirmed seats remain.
     const stillAssignable = new Set(assignableTargets(data).map((t) => `${t.kind}:${t.id}`))
     data.assignments = data.assignments.filter((a) => stillAssignable.has(`${a.target.kind}:${a.target.id}`) || a.to < b.startDate)
+    // Verified payments are never left untracked: a refund review opens, with no deductions unless a policy allows them.
+    const refund = openRefund(data, b, at, b.cancelReason, b.cancelledBy)
     activity(data, at, {
-      category: 'Bookings', title: 'Booking cancelled', body: `${b.id} (${customerName(data, b.customerId)}): ${b.cancelReason}`, link: `/admin/bookings?id=${b.id}`,
+      category: 'Bookings', title: 'Booking cancelled', body: `${b.id} (${customerName(data, b.customerId)}): ${b.cancelReason}${refund ? `. Refund review ${refund.id} opened.` : ''}`, link: `/admin/bookings?id=${b.id}`,
     })
-    tell(data, b.customerId, at, { category: 'Bookings', title: 'Booking cancelled', body: `${b.id} · ${tripTitle(data, b)}: ${b.cancelReason}. Staff will contact you about any refund.`, link: `/app/trips/${b.id}` })
+    tell(data, b.customerId, at, {
+      category: 'Bookings', title: 'Booking cancelled',
+      body: `${b.id} · ${tripTitle(data, b)}: ${b.cancelReason}.${refund ? ` Your verified payments of ${peso(refund.paid)} are under refund review.` : ' No payment was received, so nothing is refunded.'}`, link: `/app/trips/${b.id}`,
+    })
     set({ data })
     return { ok: true }
   },
@@ -818,6 +839,68 @@ export const useAdmin = create<AdminState>((set, get) => ({
       r.events.push({ at, status: 'Under review', note: 'Staff are revising the proposal.' })
     }
     r.draftProposal = { ...r.proposal }
+    set({ data })
+    return OK
+  },
+
+  setRevisedCutoff: (bookingId, hours, note) => {
+    const s = get()
+    if (!s.userId) return fail('Please log in again.')
+    if (!note.trim()) return fail('Add a note for the customer, for example what to send.')
+    if (!Number.isInteger(hours) || hours < 1 || hours > 72) return fail('Give the customer between 1 and 72 hours.')
+    const data = structuredClone(s.data)
+    const b = data.bookings.find((x) => x.id === bookingId)
+    if (!b || (b.status !== 'Pending' && b.status !== 'Confirmed')) return fail('Only an active booking can get a new deadline.')
+    const now = policyNow(data, b.id)
+    const cutoff = addHours(now, hours)
+    if (isoMs(cutoff) >= isoMs(deadlinesOf(data, b).departAt)) return fail('The new deadline must be before departure.')
+    b.revisedCutoff = cutoff
+    b.revisedBy = { at: now, by: actorOf(s), note: note.trim() }
+    const at = demoNowStamp()
+    tell(data, b.customerId, at, { category: 'Payments', title: 'New payment deadline', body: `${b.id}: please pay ${peso(money(b, data.payments).balance)} by ${fmtExact(cutoff)}. ${note.trim()}`, link: `/app/trips/${b.id}` })
+    logActivity(data, at, { actor: actorOf(s), module: 'Payments', recordId: b.id, recordLabel: tripTitle(data, b), action: 'Revised deadline', description: `Final payment cutoff set to ${fmtExact(cutoff)}. ${note.trim()}` })
+    set({ data })
+    return OK
+  },
+
+  decideRefund: (refundId, approve, amount, note) => {
+    const s = get()
+    if (!isAdmin(s)) return fail('Only an admin can approve a refund or record that none is due.')
+    if (!note.trim()) return fail('Add a note explaining the decision.')
+    const data = structuredClone(s.data)
+    const r = data.refunds.find((x) => x.id === refundId)
+    if (!r || r.status !== 'Pending review') return fail('This refund review is already decided.')
+    const deducted = r.deductions.reduce((n, x) => n + x.amount, 0)
+    const max = r.paid - deducted
+    if (approve && (!Number.isInteger(amount) || amount <= 0 || amount > max)) return fail(`Enter a refund from ₱1 to ${peso(max)} (verified payments minus approved deductions).`)
+    const at = demoNowStamp()
+    r.status = approve ? 'Approved' : 'No refund due'
+    r.decision = { by: actorOf(s), at, note: note.trim(), amount: approve ? amount : 0 }
+    const b = data.bookings.find((x) => x.id === r.bookingId)!
+    tell(data, r.customerId, at, {
+      category: 'Payments', title: approve ? 'Refund approved' : 'Refund review completed',
+      body: approve ? `${b.id}: a refund of ${peso(amount)} is approved. Staff will send it and record the transfer details.` : `${b.id}: no refund is due. ${note.trim()}`, link: `/app/trips/${b.id}`,
+    })
+    logActivity(data, at, { actor: actorOf(s), module: 'Payments', recordId: r.id, recordLabel: `Refund for ${b.id}`, action: approve ? 'Refund approved' : 'No refund due', description: `${approve ? `${peso(amount)} approved.` : 'Recorded that no refund is due.'} ${note.trim()}`, changes: [{ field: 'Refund status', from: 'Pending review', to: r.status }] })
+    set({ data })
+    return OK
+  },
+
+  recordRefund: (refundId, x) => {
+    const s = get()
+    if (!s.userId) return fail('Please log in again.')
+    if (!x.method.trim()) return fail('Choose how the refund was sent.')
+    if (x.reference.trim().length < 4) return fail('Enter the transfer reference number.')
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(x.date) || x.date > DEMO_TODAY) return fail('Enter the date the refund was sent (today or earlier).')
+    const data = structuredClone(s.data)
+    const r = data.refunds.find((y) => y.id === refundId)
+    if (!r || r.status !== 'Approved') return fail('Only an approved refund can be recorded as processed.')
+    const at = demoNowStamp()
+    r.status = 'Processed'
+    r.processed = { by: actorOf(s), at, method: x.method.trim(), reference: x.reference.trim(), date: x.date, note: x.note?.trim() || undefined }
+    const b = data.bookings.find((y) => y.id === r.bookingId)!
+    tell(data, r.customerId, at, { category: 'Payments', title: 'Refund sent', body: `${b.id}: ${peso(r.decision!.amount)} was sent by ${r.processed.method} (ref ${r.processed.reference}) on ${x.date}.`, link: `/app/trips/${b.id}` })
+    logActivity(data, at, { actor: actorOf(s), module: 'Payments', recordId: r.id, recordLabel: `Refund for ${b.id}`, action: 'Refund processed', description: `${peso(r.decision!.amount)} via ${r.processed.method}, ref ${r.processed.reference}, sent ${x.date}.`, changes: [{ field: 'Refund status', from: 'Approved', to: 'Processed' }] })
     set({ data })
     return OK
   },

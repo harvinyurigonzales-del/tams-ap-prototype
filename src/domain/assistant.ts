@@ -1,9 +1,9 @@
 import { DEMO_TODAY } from '../lib/demoClock'
-import { fmtDate, fmtRange, fmtTime, peso } from '../lib/format'
+import { fmtDate, fmtExact, fmtRange, fmtTime, peso } from '../lib/format'
 import type { Dataset, Destination, Service } from '../seed/types'
 import { bookableDeparture, catalogTours, fromPrice } from './recommend'
 import { requestDestination, requestStatusLabel } from './requests'
-import { BALANCE_DUE_DAYS_BEFORE, BOOKING_CUTOFF_DAYS, DOWN_PAYMENT_RATE, departureAvailability, money } from './rules'
+import { BOOKING_CUTOFF_DAYS, DOWN_PAYMENT_RATE, departureAvailability, money } from './rules'
 
 // Ask TAMS. Developer note: questions are matched to a fixed list of intents by keywords, and every answer is
 // assembled from the catalog data and the policies in rules.ts. Anything outside those intents is offered to
@@ -186,7 +186,7 @@ export function answerQuestion(d: Dataset, { question, customerId, context }: As
   if (has(q, 'down payment', 'downpayment', 'deposit', 'balance due', 'reservation fee', '50%', 'installment')) {
     return {
       intent: 'down_payment',
-      text: `A ${DOWN_PAYMENT_RATE * 100}% down payment holds your booking. The balance is due ${BALANCE_DUE_DAYS_BEFORE} days before travel. For custom trips and van rentals, you pay only after you accept the proposal or quote.`,
+      text: `A ${DOWN_PAYMENT_RATE * 100}% down payment holds your booking. The balance is due 72 hours before departure, with a 24-hour grace period; a balance still unpaid after that cancels the booking. Cancellation requests close 72 hours before departure. For custom trips and van rentals, you pay only after you accept the proposal or quote.`,
     }
   }
 
@@ -437,7 +437,7 @@ function personalAnswer(d: Dataset, customerId: string | null, ref: string | und
     if (b) {
       const s = d.services.find((x) => x.id === b.serviceId)!
       const m = money(b, d.payments)
-      const pay = m.submitted.length ? ' A payment is awaiting verification.' : m.balance > 0 && b.status !== 'Cancelled' ? ` Balance ${peso(m.balance)}, due ${fmtDate(m.dueDate, { year: false })}.` : ''
+      const pay = m.submitted.length ? ' A payment is awaiting verification.' : m.balance > 0 && b.status !== 'Cancelled' ? ` Balance ${peso(m.balance)}, due ${fmtExact(m.dueAt)}.` : ''
       return {
         intent: 'personal',
         text: `${b.id} (${b.label ?? s.name}, ${fmtRange(b.startDate, b.endDate)}): status ${b.status}, ${m.summary.toLowerCase()}.${pay}`,

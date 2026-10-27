@@ -4,15 +4,18 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { agreedOf } from '../../domain/packages'
 import { assignableTargets, canCancel, canConfirm, money, rentalDays, shortRange } from '../../domain/rules'
-import { fmtDate, fmtRange, fmtStamp, fmtTime, peso } from '../../lib/format'
-import { useAdmin } from '../../state/adminStore'
+import { fmtDate, fmtExact, fmtRange, fmtStamp, fmtTime, peso } from '../../lib/format'
+import { useAdmin, useIsAdmin } from '../../state/adminStore'
+import { deadlinesOf, paymentState, selfCancelOpen } from '../../domain/paymentPolicy'
+import { DEMO_TODAY } from '../../lib/demoClock'
+import { DeadlinePanel, TimelineUtility } from '../customer/PaymentDeadline'
 import { useUi } from '../../state/ui'
 import type { Payment } from '../../seed/types'
 import { Badge, LocalTag, StatusBadge } from '../../ui/Badge'
 import { Button, DisabledHint } from '../../ui/Button'
 import { Row } from '../../ui/Card'
 import { ConfirmDialog, Dialog } from '../../ui/Dialog'
-import { Select, TextArea } from '../../ui/Field'
+import { Select, TextArea, TextField } from '../../ui/Field'
 import { AssignDialog } from './Assign'
 import { customerOf, serviceOf } from './common'
 
@@ -50,6 +53,7 @@ export function BookingPanel({ bookingId, onClose }: { bookingId: string; onClos
   const asg = target?.assignment
   const van = asg && data.vehicles.find((v) => v.id === asg.vehicleId)
   const drv = asg && data.drivers.find((d) => d.id === asg.driverId)
+  const refund = data.refunds.find((r) => r.bookingId === b.id)
 
   return (
     <>
@@ -109,17 +113,23 @@ export function BookingPanel({ bookingId, onClose }: { bookingId: string; onClos
             <h3 className="mb-1 text-xs font-semibold tracking-wide text-ink-3 uppercase">Amounts</h3>
             <Row label={b.requestId ? `Accepted ${b.requestId.startsWith('VR-') ? 'quote' : 'proposal'}` : b.rental ? `${peso(b.unitPrice)} × ${rentalDays(b.startDate, b.endDate)} days` : `${peso(b.unitPrice)} × ${b.pax}${b.promoOff ? `, less ${peso(b.promoOff)} promo each` : ''}`}>{peso(b.total)}</Row>
             <Row label="Down payment (50%)">{peso(m.down)}</Row>
-            <Row label="Paid (verified)">{peso(m.paid)}</Row>
-            <Row label="Balance" strong>
-              {peso(m.balance)}
-            </Row>
-            {b.status !== 'Cancelled' && m.balance > 0 && <p className="text-xs text-ink-2">Balance due {fmtDate(m.dueDate, { weekday: true })}</p>}
+            <DeadlinePanel data={data} booking={b} who="staff" />
+            {(b.status === 'Pending' || b.status === 'Confirmed') && <p className="mt-2 text-xs text-ink-2">Customer self-service cancellation: {selfCancelOpen(data, b) ? `open until ${fmtExact(deadlinesOf(data, b).selfCancelUntil)}` : 'closed (72 hours before departure). Staff can still cancel for exceptional cases.'}</p>}
+            {paymentState(data, b).stage === 'needs-resolution' && <RevisedCutoff bookingId={b.id} />}
             {b.status === 'Cancelled' && (
               <p className="mt-2 rounded-lg bg-bad-bg px-3 py-2 text-xs text-bad">
-                Cancelled{b.cancelledAt ? ` ${fmtStamp(b.cancelledAt)}` : ''}: {b.cancelReason}. Refunds are handled separately.
+                Cancelled{b.cancelledAt ? ` ${fmtStamp(b.cancelledAt)}` : ''}
+                {b.cancelledBy === 'system' ? ' automatically' : b.cancelledBy === 'customer' ? ' at the customer’s request' : b.cancelledBy === 'staff' ? ' by staff' : ''}: {b.cancelReason}.{' '}
+                {refund ? `Refund review ${refund.id}: ${refund.status}.` : m.paid > 0 ? 'Verified payments are on record.' : 'No payment was received, so no refund is due.'}
               </p>
             )}
           </section>
+
+          {refund && (
+            <section>
+              <RefundAdmin refundId={refund.id} />
+            </section>
+          )}
 
           <section>
             <h3 className="mb-2 text-xs font-semibold tracking-wide text-ink-3 uppercase">Payments</h3>
@@ -179,6 +189,8 @@ export function BookingPanel({ bookingId, onClose }: { bookingId: string; onClos
               {b.departureId && asg && <p className="text-xs text-ink-3">Shared by everyone on this departure.</p>}
             </section>
           )}
+
+          <TimelineUtility data={data} booking={b} />
         </div>
 
         <div className="space-y-2 border-t border-line px-5 py-4">
@@ -370,5 +382,148 @@ export function BookingPanel({ bookingId, onClose }: { bookingId: string; onClos
 
       {assign && target && <AssignDialog target={target} onClose={() => setAssign(false)} />}
     </>
+  )
+}
+
+function RevisedCutoff({ bookingId }: { bookingId: string }) {
+  const setRevisedCutoff = useAdmin((s) => s.setRevisedCutoff)
+  const toast = useUi((s) => s.toast)
+  const [hours, setHours] = useState('24')
+  const [note, setNote] = useState('Please send a clear photo of the receipt with the reference number.')
+  const [error, setError] = useState('')
+  return (
+    <div className="mt-3 rounded-xl border border-warn/40 bg-warn-bg p-3">
+      <p className="text-sm font-semibold text-ink">Set a revised payment deadline</p>
+      <p className="text-xs text-ink-2">The customer paid before the cutoff but the payment was rejected. Give them a final cutoff, or cancel the booking yourself.</p>
+      <div className="mt-2 grid gap-2">
+        <Select label="New final cutoff" value={hours} onChange={(e) => setHours(e.target.value)}>
+          {['6', '12', '24', '48'].map((h) => (
+            <option key={h} value={h}>
+              {h} hours from now
+            </option>
+          ))}
+        </Select>
+        <TextArea label="Note to the customer" rows={2} value={note} onChange={(e) => setNote(e.target.value)} error={error} />
+        <Button
+          size="sm"
+          onClick={() => {
+            const r = setRevisedCutoff(bookingId, Number(hours), note)
+            if (!r.ok) return setError(r.error)
+            setError('')
+            toast('Revised deadline sent to the customer.')
+          }}
+        >
+          Send revised deadline
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/** Refund review: proposed amount, the admin decision and the recorded transfer, kept apart from booking and payment status. */
+function RefundAdmin({ refundId }: { refundId: string }) {
+  const { data, decideRefund, recordRefund } = useAdmin()
+  const admin = useIsAdmin()
+  const toast = useUi((s) => s.toast)
+  const r = data.refunds.find((x) => x.id === refundId)!
+  const [mode, setMode] = useState<'approve' | 'none' | 'record' | null>(null)
+  const [amount, setAmount] = useState(r.proposed)
+  const [note, setNote] = useState('')
+  const [rec, setRec] = useState({ method: 'GCash', reference: '', date: DEMO_TODAY, note: '' })
+  const [error, setError] = useState('')
+  const done = (msg: string) => (setMode(null), setError(''), toast(msg))
+  return (
+    <div className="rounded-xl border border-line p-3">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-xs font-semibold tracking-wide text-ink-3 uppercase">Refund review</h3>
+        <Badge tone={r.status === 'Processed' ? 'ok' : r.status === 'Pending review' ? 'warn' : r.status === 'Approved' ? 'info' : 'neutral'}>{r.status}</Badge>
+      </div>
+      <p className="mt-1 text-xs text-ink-2">
+        {r.id} · opened {fmtStamp(r.createdAt)} · {r.reason}
+      </p>
+      <div className="mt-2">
+        <Row label="Verified amount paid">{peso(r.paid)}</Row>
+        <Row label="Deductions">{r.deductions.length ? `−${peso(r.deductions.reduce((n, x) => n + x.amount, 0))}` : 'None'}</Row>
+        <Row label={r.decision ? 'Decided refund' : 'Proposed refund'} strong>
+          {peso(r.decision ? r.decision.amount : r.proposed)}
+        </Row>
+      </div>
+      <p className="mt-1 text-xs text-ink-3">No deduction policy is set, so none apply. Booking, payment and refund statuses are tracked separately.</p>
+      {r.decision && (
+        <p className="mt-2 text-xs text-ink-2">
+          {r.status === 'No refund due' ? 'No refund due' : 'Approved'} by {r.decision.by} · {fmtStamp(r.decision.at)}: {r.decision.note}
+        </p>
+      )}
+      {r.processed && (
+        <p className="mt-1 text-xs text-ink-2">
+          Sent {fmtDate(r.processed.date)} by {r.processed.method}, ref {r.processed.reference}. Recorded by {r.processed.by}.
+        </p>
+      )}
+      {r.status === 'Pending review' && !admin && <p className="mt-2 text-xs text-ink-2">An admin approves the refund amount or records that none is due.</p>}
+      {r.status === 'Pending review' && admin && mode === null && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button size="sm" onClick={() => (setMode('approve'), setNote(''))}>
+            Approve refund
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => (setMode('none'), setNote(''))}>
+            No refund due
+          </Button>
+        </div>
+      )}
+      {r.status === 'Approved' && mode === null && (
+        <Button size="sm" className="mt-2" onClick={() => setMode('record')}>
+          Record refund sent
+        </Button>
+      )}
+      {(mode === 'approve' || mode === 'none') && (
+        <div className="mt-2 grid gap-2">
+          {mode === 'approve' && <TextField label="Refund amount (₱)" type="number" inputMode="numeric" value={amount || ''} onChange={(e) => setAmount(Number(e.target.value) || 0)} />}
+          <TextArea label={mode === 'approve' ? 'Decision note' : 'Why no refund is due'} rows={2} value={note} onChange={(e) => setNote(e.target.value)} error={error} />
+          <p className="text-xs text-ink-3">Approving does not send money. Record the transfer once it is made.</p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                const res = decideRefund(r.id, mode === 'approve', amount, note)
+                if (!res.ok) return setError(res.error)
+                done(mode === 'approve' ? 'Refund approved.' : 'Recorded that no refund is due.')
+              }}
+            >
+              Save decision
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setMode(null)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+      {mode === 'record' && (
+        <div className="mt-2 grid gap-2">
+          <Select label="Sent by" value={rec.method} onChange={(e) => setRec({ ...rec, method: e.target.value })}>
+            {['GCash', 'Maya', 'Bank transfer', 'Cash'].map((x) => (
+              <option key={x}>{x}</option>
+            ))}
+          </Select>
+          <TextField label="Transfer reference" value={rec.reference} onChange={(e) => setRec({ ...rec, reference: e.target.value })} />
+          <TextField label="Date sent" type="date" max={DEMO_TODAY} value={rec.date} onChange={(e) => setRec({ ...rec, date: e.target.value })} />
+          <TextArea label="Note (optional)" rows={2} value={rec.note} onChange={(e) => setRec({ ...rec, note: e.target.value })} error={error} />
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                const res = recordRefund(r.id, rec)
+                if (!res.ok) return setError(res.error)
+                done('Refund recorded as processed.')
+              }}
+            >
+              Save as processed
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setMode(null)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

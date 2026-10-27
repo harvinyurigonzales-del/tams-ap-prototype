@@ -2,16 +2,19 @@ import { BusFront, CalendarDays, CheckSquare, ChevronRight, ClipboardList, Penci
 import { useState, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { agreedOf } from '../../domain/packages'
-import { canCancel, money, payableOptions } from '../../domain/rules'
+import { paymentState, selfCancelOpen } from '../../domain/paymentPolicy'
+import { bookedLate, canCancel, money, payableOptions } from '../../domain/rules'
+import { usePresenter } from '../../state/presenter'
+import { cancelRule, DeadlinePanel, RefundCard, TimelineUtility } from './PaymentDeadline'
 import { requestDestination } from '../../domain/requests'
 import { daysBetween, DEMO_TODAY } from '../../lib/demoClock'
-import { fmtDate, fmtRange, fmtStamp, fmtTime, peso } from '../../lib/format'
+import { fmtExact, fmtRange, fmtStamp, fmtTime, peso } from '../../lib/format'
 import { myRecords, useCustomer } from '../../state/customerStore'
 import { useUi } from '../../state/ui'
 import type { Booking, Dataset } from '../../seed/types'
 import { StatusBadge } from '../../ui/Badge'
 import { Button, DisabledHint, LinkButton } from '../../ui/Button'
-import { Card, Row } from '../../ui/Card'
+import { Card } from '../../ui/Card'
 import { ConfirmDialog } from '../../ui/Dialog'
 import { EmptyState } from '../../ui/EmptyState'
 import { Picture } from '../../ui/Picture'
@@ -204,6 +207,7 @@ function RequestList({ rows, empty }: { rows: ReqRow[]; empty: ReactNode }) {
 export function TripDetails() {
   const { bookingId } = useParams()
   const { data, customerId, requestCancellation } = useCustomer()
+  const presenter = usePresenter((s) => s.on)
   const toast = useUi((s) => s.toast)
   const [cancel, setCancel] = useState(false)
   const b = data.bookings.find((x) => x.id === bookingId && x.customerId === customerId)
@@ -213,6 +217,7 @@ export function TripDetails() {
   const payments = data.payments.filter((p) => p.bookingId === b.id)
   const canPay = payableOptions(b, data.payments).length > 0
   const cancelCheck = canCancel(b)
+  const refund = data.refunds.find((r) => r.bookingId === b.id)
   const reqLink = b.requestId?.startsWith('CR-') ? `/app/custom/${b.requestId}` : b.requestId ? `/app/rentals/${b.requestId}` : undefined
   const agreed = agreedOf(data, b)
   const pickup = b.rental ? `${b.rental.pickup}${s.type === 'van' ? `, ${fmtTime(agreed.pickupTime)}` : ''}` : `${agreed.pickup}, ${fmtTime(agreed.pickupTime)}`
@@ -255,7 +260,11 @@ export function TripDetails() {
               )}
             </div>
             {b.status === 'Cancelled' && (
-              <p className="mt-4 rounded-xl bg-bad-bg px-4 py-3 text-sm text-bad">Cancelled{b.cancelReason ? `: ${b.cancelReason}` : ''}. Staff will explain any refund when they contact you.</p>
+              <p className="mt-4 rounded-xl bg-bad-bg px-4 py-3 text-sm text-bad">
+                Cancelled{b.cancelReason ? `: ${b.cancelReason}` : ''}
+                {b.cancelledAt ? ` on ${fmtExact(b.cancelledAt)}` : ''}.{' '}
+                {refund ? 'See the refund review for your verified payments.' : m.paid > 0 ? 'Staff will contact you about your payments.' : 'No payment was received, so nothing is refunded.'}
+              </p>
             )}
             {b.cancellationRequested && b.status !== 'Cancelled' && (
               <p className="mt-4 rounded-xl bg-warn-bg px-4 py-3 text-sm text-warn">Cancellation requested. The agency will contact you about it.</p>
@@ -317,36 +326,48 @@ export function TripDetails() {
 
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
           <Card className="p-5">
-            <Row label="Total">{peso(b.total)}</Row>
-            <Row label="Paid (verified)">{peso(m.paid)}</Row>
-            <Row label="Balance" strong>
-              {peso(m.balance)}
-            </Row>
-            {m.balance > 0 && b.status !== 'Cancelled' && (
-              <p className="mt-2 text-xs text-ink-2">
-                Down payment {peso(m.down)} · balance due {fmtDate(m.dueDate, { weekday: true, year: false })}
-              </p>
+            <DeadlinePanel data={data} booking={b} who="customer" />
+            {m.submitted.length > 0 && paymentState(data, b).stage !== 'verifying' && (
+              <p className="mt-3 rounded-xl bg-warn-bg px-3 py-2 text-sm text-warn">A payment of {peso(m.submitted[0].amount)} is awaiting verification.</p>
             )}
-            {m.submitted.length > 0 && <p className="mt-3 rounded-xl bg-warn-bg px-3 py-2 text-sm text-warn">A payment of {peso(m.submitted[0].amount)} is awaiting verification.</p>}
             <div className="mt-4 grid gap-2">
               {canPay && (
                 <LinkButton to={`/app/trips/${b.id}/pay`} size="lg" full>
-                  {m.lastRejected && m.paid === 0 ? 'Submit new proof' : m.paid > 0 ? 'Pay balance' : 'Pay now'}
+                  {m.lastRejected && m.paid === 0 ? 'Submit new proof' : m.paid > 0 ? 'Pay balance' : bookedLate(b) ? 'Pay in full' : 'Pay now'}
                 </LinkButton>
               )}
               {(b.status === 'Pending' || b.status === 'Confirmed') && (
                 <>
-                  <Button variant="secondary" size="lg" full disabled={!cancelCheck.ok || b.cancellationRequested} onClick={() => setCancel(true)}>
-                    Request cancellation
-                  </Button>
-                  {(b.cancellationRequested || !cancelCheck.ok) && <DisabledHint>{b.cancellationRequested ? 'Your request has been sent.' : cancelCheck.reason}</DisabledHint>}
+                  {selfCancelOpen(data, b) ? (
+                    <>
+                      <Button variant="secondary" size="lg" full disabled={!cancelCheck.ok || b.cancellationRequested} onClick={() => setCancel(true)}>
+                        Request cancellation
+                      </Button>
+                      {(b.cancellationRequested || !cancelCheck.ok) && <DisabledHint>{b.cancellationRequested ? 'Your request has been sent.' : cancelCheck.reason}</DisabledHint>}
+                    </>
+                  ) : (
+                    <div className="rounded-xl bg-surface-muted px-3 py-2.5 text-sm text-ink-2">
+                      <p className="font-semibold text-ink">Cancellation requests are closed</p>
+                      <p className="mt-0.5">They close 72 hours before departure, when the van, driver and seats are being finalised. For an emergency or other exceptional case, contact staff.</p>
+                      <a href={`tel:${TRIP_DESK.mobile.replace(/\s/g, '')}`} className="mt-2 inline-flex items-center gap-1.5 font-semibold text-brand-700 hover:underline">
+                        <Phone className="size-4" aria-hidden /> Contact staff · {TRIP_DESK.mobile}
+                      </a>
+                    </div>
+                  )}
+                  {selfCancelOpen(data, b) && <p className="text-xs text-ink-2">{cancelRule(data, b)}</p>}
                 </>
               )}
               <AskAboutButton kind="booking" id={b.id} />
             </div>
           </Card>
+          {refund && (
+            <Card className="p-5">
+              <RefundCard refund={refund} />
+            </Card>
+          )}
           {b.status === 'Completed' && <RateTrip bookingId={b.id} />}
           <SimulateBooking booking={b} />
+          {presenter && <TimelineUtility data={data} booking={b} />}
         </aside>
       </div>
       <ConfirmDialog
@@ -384,7 +405,7 @@ function PreTravel({ booking: b }: { booking: Booking }) {
   const items = [
     { id: 'id', label: 'Bring a valid ID and your booking reference' },
     { id: 'pickup', label: `Be at the pickup point 15 minutes before ${pickupTime}` },
-    ...(m.balance > 0 ? [{ id: 'balance', label: `Pay the ${peso(m.balance)} balance by ${fmtDate(m.dueDate, { year: false })}` }] : []),
+    ...(m.balance > 0 ? [{ id: 'balance', label: `Pay the ${peso(m.balance)} balance by ${fmtExact(m.dueAt)}` }] : []),
     { id: 'cash', label: 'Bring cash for meals and fees not included' },
     ...(dest?.interests.includes('Cool weather') ? [{ id: 'jacket', label: `Pack a jacket: ${dest.name} gets cold` }] : []),
     ...(dest?.interests.includes('Beach') ? [{ id: 'swim', label: 'Pack swimwear, sunscreen and a change of clothes' }] : []),
@@ -410,7 +431,7 @@ function PreTravel({ booking: b }: { booking: Booking }) {
         </div>
         <div>
           <dt className="text-ink-2">Balance</dt>
-          <dd className="font-medium text-ink">{m.balance > 0 ? `${peso(m.balance)} due ${fmtDate(m.dueDate, { year: false })}` : 'Fully paid'}</dd>
+          <dd className="font-medium text-ink">{m.balance > 0 ? `${peso(m.balance)} due ${fmtExact(m.dueAt)}` : 'Fully paid'}</dd>
         </div>
         <div>
           <dt className="text-ink-2">Van and driver</dt>

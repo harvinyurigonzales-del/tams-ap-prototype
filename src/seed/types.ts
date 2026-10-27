@@ -163,13 +163,13 @@ export interface Booking {
   /** Who cancelled: the customer (approved request), staff, or the payment-deadline rule. */
   cancelledBy?: 'customer' | 'staff' | 'system'
   /** Payment-deadline stages already handled, so repeated checks never notify or cancel twice. */
-  deadlineLog?: DeadlineStage[]
+  deadlineLog?: string[]
   /** Final payment cutoff set by staff after a rejected payment (replaces the grace-period end). */
   revisedCutoff?: string
+  /** When staff set the revised cutoff, and why. */
+  revisedBy?: { at: string; by: string; note: string }
   origin: Origin
 }
-
-export type DeadlineStage = 'reminder' | 'due' | 'overdue' | 'cancelled' | 'hold' | 'resolution'
 
 export interface Payment {
   id: string

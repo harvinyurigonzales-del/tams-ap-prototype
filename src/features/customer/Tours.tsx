@@ -3,7 +3,7 @@ import { useEffect, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { isOffered, priceUnitOf } from '../../domain/packages'
 import { ratingOf, reviewsFor } from '../../domain/reviews'
-import { BALANCE_DUE_DAYS_BEFORE, BOOKING_CUTOFF_DAYS, DOWN_PAYMENT_RATE, promoFor, shortRange } from '../../domain/rules'
+import { BOOKING_CUTOFF_DAYS, DOWN_PAYMENT_RATE, promoFor, shortRange } from '../../domain/rules'
 import { DEMO_TODAY } from '../../lib/demoClock'
 import { fmtDate, fmtTime, peso } from '../../lib/format'
 import { useAssistant } from '../../state/assistant'
@@ -214,9 +214,11 @@ export function TourPage({ s, deps, preview = false }: { s: Service; deps: Retur
               <Condition title={`${DOWN_PAYMENT_RATE * 100}% down payment holds your seat`}>
                 Pay by GCash, Maya or bank transfer and upload your receipt. Staff verify it before your booking is confirmed.
               </Condition>
-              <Condition title={`Balance due ${BALANCE_DUE_DAYS_BEFORE} days before`}>The remaining balance is due {BALANCE_DUE_DAYS_BEFORE} days before the departure date.</Condition>
-              <Condition title={`Online booking closes ${BOOKING_CUTOFF_DAYS} days before`}>After that, message us and staff will check if a seat can still be added.</Condition>
-              <Condition title="Cancellations">Request a cancellation from My Trips any time before the travel date. Staff review each request and contact you.</Condition>
+              <Condition title="Balance due 72 hours before departure">
+                Counted from the pickup time. We remind you 24 hours before the deadline, and a 24-hour grace period follows. A balance still unpaid after that cancels the booking.
+              </Condition>
+              <Condition title={`Online booking closes ${BOOKING_CUTOFF_DAYS} days before`}>Bookings made within 72 hours of departure are paid in full. After the cutoff, message us and staff will check if a seat can still be added.</Condition>
+              <Condition title="Cancellations close 72 hours before">Request a cancellation from My Trips until 72 hours before departure. After that, contact staff about exceptional circumstances.</Condition>
             </ul>
           </section>
         </div>

@@ -47,6 +47,12 @@ export const daysBetween = (a: string, b: string) => Math.round((dayMs(b) - dayM
 export const weekday = (d: string) => new Date(dayMs(d)).getUTCDay() // 0 = Sunday
 export const dateOf = (iso: string) => iso.slice(0, 10)
 
+/** Milliseconds of an ISO timestamp (with its offset). */
+export const isoMs = (iso: string) => Date.parse(iso)
+/** A Manila timestamp from milliseconds, as 'YYYY-MM-DDTHH:MM:SS+08:00'. */
+export const manilaIso = (ms: number) => `${new Date(ms + 8 * 3_600_000).toISOString().slice(0, 19)}+08:00`
+export const addHours = (iso: string, h: number) => manilaIso(isoMs(iso) + h * 3_600_000)
+
 /** Overlap of two inclusive day ranges. */
 export const overlaps = (a1: string, a2: string, b1: string, b2: string) => a1 <= b2 && b1 <= a2
 
@@ -63,6 +69,12 @@ export function demoNowStamp(): string {
   const hh = String(Math.floor(total / 60)).padStart(2, '0')
   const mm = String(total % 60).padStart(2, '0')
   return `${DEMO_TODAY}T${hh}:${mm}:00+08:00`
+}
+
+/** The current demo time without using up a minute: the time of the latest action, or 9:30 AM before any. */
+export function demoNow(): string {
+  const total = Math.min(24 * 60 - 1, BASE_MINUTE + ticks)
+  return `${DEMO_TODAY}T${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}:00+08:00`
 }
 
 /** Continues the sequence after the latest action saved for today, so reloading never reuses a time. */

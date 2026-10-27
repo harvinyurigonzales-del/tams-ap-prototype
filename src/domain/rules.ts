@@ -1,9 +1,12 @@
-import { addDays, daysBetween, DEMO_TODAY, dateOf, overlaps } from '../lib/demoClock'
+import { addDays, addHours, daysBetween, DEMO_TODAY, dateOf, isoMs, overlaps } from '../lib/demoClock'
 import type { Assignment, Block, Booking, Dataset, Departure, Driver, Payment, PaymentSummary, Service, Vehicle } from '../seed/types'
 
 // Business rules R1–R14 from the spec. All functions are pure so screens, dashboard and reports agree.
 
 export const DOWN_PAYMENT_RATE = 0.5
+/** The balance is due 72 hours before departure (see paymentPolicy.ts for reminders, grace and cancellation). */
+export const BALANCE_DUE_HOURS_BEFORE = 72
+/** Kept for wording that counts in days. */
 export const BALANCE_DUE_DAYS_BEFORE = 3
 export const BOOKING_CUTOFF_DAYS = 2
 export const VAN_RENTAL_MAX_PAX = 12
@@ -11,6 +14,10 @@ export const VAN_RENTAL_MAX_PAX = 12
 /** R7: 50% of the total, rounded up to the peso. */
 export const downPayment = (total: number) => Math.ceil(total * DOWN_PAYMENT_RATE)
 export const balanceDueDate = (startDate: string) => addDays(startDate, -BALANCE_DUE_DAYS_BEFORE)
+/** Exact balance deadline: 72 hours before the agreed pickup time on the start date, Manila time. */
+export const balanceDueAt = (b: Pick<Booking, 'startDate' | 'agreed'>) => addHours(`${b.startDate}T${b.agreed?.pickupTime ?? '06:00'}:00+08:00`, -BALANCE_DUE_HOURS_BEFORE)
+/** Booked inside the 72-hour window: the whole amount is due at once. */
+export const bookedLate = (b: Booking) => isoMs(b.createdAt) >= isoMs(balanceDueAt(b))
 
 /** R3: a promo applies when the booking is created on or before its book-by date. */
 export function promoFor(dep: Departure | undefined, createdDate: string) {
@@ -69,7 +76,8 @@ export function money(b: Booking, payments: Payment[]) {
   const summary: PaymentSummary = paid >= b.total ? 'Fully paid' : paid > 0 ? 'Partially paid' : 'Unpaid'
   const submitted = payments.filter((p) => p.bookingId === b.id && p.status === 'Submitted')
   const lastRejected = payments.filter((p) => p.bookingId === b.id && p.status === 'Rejected').at(-1)
-  return { paid, balance, summary, submitted, lastRejected, down: downPayment(b.total), dueDate: balanceDueDate(b.startDate) }
+  const dueAt = balanceDueAt(b)
+  return { paid, balance, summary, submitted, lastRejected, down: downPayment(b.total), dueAt, dueDate: dueAt.slice(0, 10) }
 }
 
 /** R9: confirm only a Pending booking whose verified payments reach the down payment. */
@@ -90,6 +98,7 @@ export function canCancel(b: Booking, today = DEMO_TODAY) {
 export function payableOptions(b: Booking, payments: Payment[]) {
   const { paid, balance, submitted, down } = money(b, payments)
   if (b.status === 'Cancelled' || b.status === 'Completed' || balance === 0 || submitted.length > 0) return []
+  if (paid === 0 && bookedLate(b)) return [{ type: 'Full' as const, amount: b.total }]
   if (paid === 0) return [
     { type: 'Down payment' as const, amount: down },
     { type: 'Full' as const, amount: b.total },

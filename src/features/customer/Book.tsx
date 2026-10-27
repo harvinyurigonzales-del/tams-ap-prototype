@@ -3,9 +3,11 @@ import { useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { isOffered, priceUnitOf } from '../../domain/packages'
 import { UnavailableTour } from './Tours'
-import { balanceDueDate, departureAvailability, downPayment, money, promoFor, rentalDays, tourTotal } from '../../domain/rules'
+import { BALANCE_DUE_HOURS, GRACE_HOURS } from '../../domain/paymentPolicy'
+import { addHours, demoNow, isoMs } from '../../lib/demoClock'
+import { departureAvailability, downPayment, money, promoFor, rentalDays, tourTotal } from '../../domain/rules'
 import { DEMO_TODAY } from '../../lib/demoClock'
-import { fmtDate, fmtRange, fmtTime, peso } from '../../lib/format'
+import { fmtDate, fmtExact, fmtRange, fmtTime, peso } from '../../lib/format'
 import { useCustomer, useMe } from '../../state/customerStore'
 import type { Booking, Service } from '../../seed/types'
 import { SampleTag, StatusBadge } from '../../ui/Badge'
@@ -102,7 +104,7 @@ export function BookingForm() {
       <div className="mt-4">
         <PriceSummary unitPrice={service.price} promoOff={promo} pax={pax} total={total} unit={priceUnitOf(service)} />
       </div>
-      <p className="mt-3 text-xs text-ink-2">Balance due {fmtDate(balanceDueDate(dep.startDate), { weekday: true })}.</p>
+      <PolicyNote dueAt={addHours(`${dep.startDate}T${service.pickupTime}:00+08:00`, -BALANCE_DUE_HOURS)} />
     </Card>
   )
 
@@ -272,6 +274,25 @@ export function BookingReceived() {
           </LinkButton>
         </div>
       </Card>
+    </div>
+  )
+}
+
+/** The payment and cancellation rules, shown before the customer books. */
+export function PolicyNote({ dueAt }: { dueAt: string }) {
+  const late = isoMs(demoNow()) >= isoMs(dueAt)
+  return (
+    <div className="mt-3 space-y-1 text-xs text-ink-2">
+      {late ? (
+        <p className="rounded-lg bg-warn-bg px-2.5 py-1.5 text-warn">
+          This departure is less than 72 hours away, so the full amount is due right after booking. Unpaid at {fmtExact(addHours(dueAt, GRACE_HOURS))}, the booking is cancelled.
+        </p>
+      ) : (
+        <p>
+          Balance due <span className="font-semibold text-ink">{fmtExact(dueAt)}</span> (72 hours before departure). A 24-hour grace period follows; a balance still unpaid at {fmtExact(addHours(dueAt, GRACE_HOURS))} cancels the booking.
+        </p>
+      )}
+      <p>Cancellation requests can be sent online until {fmtExact(dueAt)}. After that, contact staff.</p>
     </div>
   )
 }

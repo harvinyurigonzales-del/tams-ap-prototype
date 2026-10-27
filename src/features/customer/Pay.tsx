@@ -1,8 +1,10 @@
 import { CheckCircle2, Eye, FileImage, Upload, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { paymentState } from '../../domain/paymentPolicy'
 import { money, payableOptions } from '../../domain/rules'
-import { fmtDate, peso } from '../../lib/format'
+import { stageMessage } from './PaymentDeadline'
+import { peso } from '../../lib/format'
 import { DEMO_NOW } from '../../lib/demoClock'
 import { demoReceiptSrc, sampleReference } from '../../lib/receipt'
 import { useCustomer, useMe } from '../../state/customerStore'
@@ -230,7 +232,10 @@ export function Pay() {
                 {peso(chosen.amount)}
               </Row>
             </div>
-            <p className="mt-3 text-xs text-ink-2">Balance due {fmtDate(m.dueDate, { weekday: true })}.</p>
+            {(() => {
+              const st = paymentState(data, b)
+              return <p className="mt-3 text-xs text-ink-2">{st.stage === 'paid' ? '' : stageMessage(st, 'customer')}</p>
+            })()}
           </Card>
         </aside>
       </div>

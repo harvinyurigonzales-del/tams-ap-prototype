@@ -1,6 +1,7 @@
 import { useAdmin } from './adminStore'
 import { useChatbot } from './chatbot'
 import { useCustomer } from './customerStore'
+import { deadlinesPending, runDeadlines } from '../domain/paymentPolicy'
 import { DATA_VERSION } from './migrate'
 import { DATA_KEY, parseSaved, writeSaved, type Saved } from './persist'
 
@@ -34,6 +35,18 @@ function save() {
   })
 }
 
+/**
+ * Applies the payment-deadline policy to the shared records. Runs when the app loads and after every change, so
+ * reminders, overdue notices and automatic cancellations happen while the app is open; it is not a background job.
+ */
+export function applyDeadlines() {
+  const d = useAdmin.getState().data
+  if (!deadlinesPending(d)) return
+  const next = structuredClone(d)
+  runDeadlines(next)
+  useAdmin.setState({ data: next })
+}
+
 let started = false
 
 /** Starts syncing. Safe to call more than once. */
@@ -48,6 +61,7 @@ export function startSync() {
       applying = false
     }
     if (s.data !== p.data || s.accounts !== p.accounts) save()
+    if (s.data !== p.data) queueMicrotask(applyDeadlines)
   })
   useAdmin.subscribe((s, p) => {
     if (applying) return
@@ -57,6 +71,7 @@ export function startSync() {
       applying = false
     }
     if (s.data !== p.data || s.maintenance !== p.maintenance || s.accounts !== p.accounts || s.settings !== p.settings) save()
+    if (s.data !== p.data) queueMicrotask(applyDeadlines)
   })
   useChatbot.subscribe((s, p) => {
     if (!applying && s.presets !== p.presets) save()
@@ -79,5 +94,6 @@ export function startSync() {
   })
 
   // The first visit saves the fresh seed right away, so every tab starts from the same records.
+  applyDeadlines()
   save()
 }
