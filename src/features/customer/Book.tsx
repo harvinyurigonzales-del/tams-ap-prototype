@@ -1,9 +1,9 @@
 import { CheckCircle2, Minus, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { isOffered } from '../../domain/packages'
+import { isOffered, priceUnitOf } from '../../domain/packages'
 import { UnavailableTour } from './Tours'
-import { balanceDueDate, departureAvailability, downPayment, money, promoFor, rentalDays } from '../../domain/rules'
+import { balanceDueDate, departureAvailability, downPayment, money, promoFor, rentalDays, tourTotal } from '../../domain/rules'
 import { DEMO_TODAY } from '../../lib/demoClock'
 import { fmtDate, fmtRange, fmtTime, peso } from '../../lib/format'
 import { useCustomer, useMe } from '../../state/customerStore'
@@ -20,11 +20,16 @@ import { BackLink } from './Explore'
 import { Steps } from './Steps'
 import { bookingSteps, Stepper } from './Timeline'
 
-export function PriceSummary({ unitPrice, promoOff, pax, total, unit = 'person', days }: { unitPrice: number; promoOff: number; pax: number; total: number; unit?: 'person' | 'day'; days?: number }) {
+export function PriceSummary({ unitPrice, promoOff, pax, total, unit = 'person', days }: { unitPrice: number; promoOff: number; pax: number; total: number; unit?: 'person' | 'day' | 'group'; days?: number }) {
   return (
     <div className="divide-y divide-line">
       <div className="pb-2">
-        {unit === 'person' ? (
+        {unit === 'group' ? (
+          <>
+            <Row label={`Group price, up to ${pax} ${pax === 1 ? 'traveller' : 'travellers'}`}>{peso(unitPrice)}</Row>
+            {promoOff > 0 && <Row label="Promo">−{peso(promoOff)}</Row>}
+          </>
+        ) : unit === 'person' ? (
           <>
             <Row label={`${peso(unitPrice)} × ${pax} ${pax === 1 ? 'traveller' : 'travellers'}`}>{peso(unitPrice * pax)}</Row>
             {promoOff > 0 && <Row label={`Promo, ${peso(promoOff)} off × ${pax}`}>−{peso(promoOff * pax)}</Row>}
@@ -78,7 +83,7 @@ export function BookingForm() {
       />
     )
   const promo = promoFor(dep, DEMO_TODAY)
-  const total = (service.price - promo) * pax
+  const total = tourTotal(service, dep, pax).total
   const atMax = pax >= avail.left
 
   const toReview = () => {
@@ -95,7 +100,7 @@ export function BookingForm() {
       <p className="font-display text-base font-semibold text-ink">{service.name}</p>
       <p className="mt-0.5 text-sm text-ink-2">{fmtRange(dep.startDate, dep.endDate)}</p>
       <div className="mt-4">
-        <PriceSummary unitPrice={service.price} promoOff={promo} pax={pax} total={total} />
+        <PriceSummary unitPrice={service.price} promoOff={promo} pax={pax} total={total} unit={priceUnitOf(service)} />
       </div>
       <p className="mt-3 text-xs text-ink-2">Balance due {fmtDate(balanceDueDate(dep.startDate), { weekday: true })}.</p>
     </Card>

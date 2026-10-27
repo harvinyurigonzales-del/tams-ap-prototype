@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight, Clock, MapPin, Minus, Plus, Tag } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { isOffered } from '../../domain/packages'
+import { isOffered, priceUnitOf } from '../../domain/packages'
 import { UnavailableTour } from './Tours'
 import { BOOKING_CUTOFF_DAYS, promoFor, shortRange } from '../../domain/rules'
 import { addDays, DEMO_TODAY, weekday } from '../../lib/demoClock'
@@ -157,7 +157,7 @@ export function ChooseDate() {
                   ))}
                 <p className="mt-4">
                   <span className="font-display text-2xl font-bold text-brand-700 tnum">{peso(service.price - promo)}</span>
-                  <span className="text-sm text-ink-2">/person</span>
+                  <span className="text-sm text-ink-2">/{priceUnitOf(service)}</span>
                   {promo > 0 && <span className="ml-2 text-sm text-ink-3 line-through tnum">{peso(service.price)}</span>}
                 </p>
                 <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-4">

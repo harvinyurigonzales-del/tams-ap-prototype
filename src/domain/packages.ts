@@ -21,6 +21,8 @@ export function setStatus(s: Service, status: PackageStatus) {
 }
 
 export const priceBasisOf = (s: Service): 'person' | 'group' => s.priceBasis ?? 'person'
+/** Unit a price is quoted in, for price labels. */
+export const priceUnitOf = (s: Service): 'person' | 'group' | 'day' => (s.unit === 'day' ? 'day' : priceBasisOf(s))
 
 /** The terms a booking is made on, copied from the package at that moment. */
 export function agreedFrom(s: Service, pickupTime = s.pickupTime): AgreedTerms {

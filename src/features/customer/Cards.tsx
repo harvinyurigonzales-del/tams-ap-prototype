@@ -1,6 +1,7 @@
 import { BusFront, CalendarDays, Clock, Heart, MapPin, Tag } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { catalogTours } from '../../domain/recommend'
+import { priceUnitOf } from '../../domain/packages'
 import { departureInWindow, type TripWindow } from '../../domain/moods'
 import { promoFor } from '../../domain/rules'
 import { ratingFor } from '../../domain/reviews'
@@ -90,8 +91,8 @@ export function TourCard({ service: s, reason, footer, window: w }: { service: S
   return (
     <article className="group relative flex h-full flex-col overflow-hidden rounded-[20px] bg-surface ring-1 ring-line transition-shadow hover:shadow-pop">
       <div className="relative">
-        {dest ? <Picture image={dest.image} className="aspect-[16/11]" labelAt="bl" imgClassName="transition-transform duration-500 group-hover:scale-[1.03]" /> : <div className="aspect-[16/11] bg-sand" />}
-        <span className="absolute top-3 left-3 rounded-full bg-white/95 px-2.5 py-1 text-xs font-semibold text-charcoal shadow-card">Joiner tour · {s.duration.split(' / ')[0]}</span>
+        {s.image || dest ? <Picture image={s.image ?? dest!.image} className="aspect-[16/11]" labelAt="bl" imgClassName="transition-transform duration-500 group-hover:scale-[1.03]" /> : <div className="aspect-[16/11] bg-sand" />}
+        <span className="absolute top-3 left-3 rounded-full bg-white/95 px-2.5 py-1 text-xs font-semibold text-charcoal shadow-card">{s.season ? `${s.season} · ` : 'Joiner tour · '}{s.duration.split(' / ')[0]}</span>
         <SaveButton item={{ kind: 'tour', id: s.id }} name={s.name} className="absolute top-2.5 right-2.5 z-10" />
       </div>
       <div className="flex flex-1 flex-col p-5">
@@ -143,7 +144,7 @@ export function TourCard({ service: s, reason, footer, window: w }: { service: S
         <div className="min-h-5 flex-1" aria-hidden />
         <div className="flex items-end justify-between gap-3 border-t border-line pt-4">
           <div>
-            <PriceTag price={s.price - off} was={off ? s.price : undefined} unit={s.unit === 'person' ? 'person' : 'day'} />
+            <PriceTag price={s.price - off} was={off ? s.price : undefined} unit={priceUnitOf(s)} />
             {pax > 0 && next && <p className="mt-1 text-xs text-ink-2 tnum">Total for {pax}: {peso((s.price - off) * pax)}</p>}
           </div>
           {next && (

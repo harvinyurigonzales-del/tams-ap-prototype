@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { availableMoods, departureInWindow } from '../../domain/moods'
 import { catalogTours, recommendationRows, type RecItem, type RecRow } from '../../domain/recommend'
+import { priceUnitOf } from '../../domain/packages'
 import { proposalExpired } from '../../domain/requests'
 import { BALANCE_DUE_DAYS_BEFORE, DOWN_PAYMENT_RATE, money, payableOptions, promoFor } from '../../domain/rules'
 import { DEMO_TODAY } from '../../lib/demoClock'
@@ -338,7 +339,7 @@ function FeatureTour({ service: s }: { service: Service }) {
   return (
     <article className="group relative mt-8 grid overflow-hidden rounded-[28px] bg-surface ring-1 ring-line lg:grid-cols-[1.35fr_1fr]">
       <div className="relative">
-        {dest && <Picture image={dest.image} sizes="(min-width: 1024px) 50vw, 100vw" className="aspect-[4/3] lg:aspect-auto lg:h-full" labelAt="bl" />}
+        {(s.image || dest) && <Picture image={s.image ?? dest!.image} sizes="(min-width: 1024px) 50vw, 100vw" className="aspect-[4/3] lg:aspect-auto lg:h-full" labelAt="bl" />}
         {off > 0 && (
           <span className="absolute top-4 left-4 rounded-full bg-sili px-3 py-1.5 text-xs font-semibold text-white">
             {next.dep.promo!.label}: {peso(off)} off, book by {fmtDate(next.dep.promo!.bookBy, { year: false })}
@@ -368,7 +369,7 @@ function FeatureTour({ service: s }: { service: Service }) {
           </Detail>
         </dl>
         <div className="mt-auto flex flex-wrap items-end justify-between gap-4 pt-8">
-          <PriceTag price={s.price - off} was={off ? s.price : undefined} size="lg" />
+          <PriceTag price={s.price - off} was={off ? s.price : undefined} unit={priceUnitOf(s)} size="lg" />
           <Link
             to={`/app/tours/${s.id}/dates?d=${next.dep.id}`}
             className="relative z-10 inline-flex h-12 items-center rounded-full bg-sili px-6 text-[15px] font-semibold text-white hover:bg-sili-600"

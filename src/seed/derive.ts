@@ -4,6 +4,7 @@ import { driverConflict, seatUse, vehicleConflict, type AssignTarget } from '../
 import { addDays, DEMO_TODAY, SEED_SHIFT_DAYS, SEED_SHIFT_MONTHS } from '../lib/demoClock'
 import { normalize } from '../state/migrate'
 import { canonical } from './canonical'
+import { addSeasonal } from './seasonal'
 import { expandDataset } from './expand'
 import { shiftDataset } from './shift'
 import type { CustomRequest, Dataset, Driver, Vehicle } from './types'
@@ -148,6 +149,7 @@ export function sharedSeed(): { data: Dataset; maintenance: MaintenanceRecord[] 
   data.next.customRequest += 1
   r.proposal = { ...draftCustomProposal(r, dest, stamp(-3, '15:40')), startDate, endDate, datesSet: true }
   data.customRequests.push(r)
+  addSeasonal(data)
   normalize(data)
   return { data, maintenance }
 }

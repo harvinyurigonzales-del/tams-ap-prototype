@@ -5,7 +5,7 @@ import { Card } from '../../ui/Card'
 import { Dialog } from '../../ui/Dialog'
 import { Link } from 'react-router-dom'
 import { fmtStamp } from '../../lib/format'
-import type { AppNotification, Dataset } from '../../seed/types'
+import type { ActivityModule, AppNotification, Dataset } from '../../seed/types'
 import { useAdmin } from '../../state/adminStore'
 
 export const customerOf = (d: Dataset, id: string) => d.customers.find((c) => c.id === id)
@@ -145,7 +145,7 @@ export function paginate<T>(rows: T[], page: number, size = 8) {
 }
 
 /** Add or edit form in a dialog. onSave returns an error to keep the dialog open, or nothing to close it. */
-export function FormDialog({ open, onClose, title, saveLabel = 'Save', onSave, children, wide }: { open: boolean; onClose: () => void; title: string; saveLabel?: string; onSave: () => string | void; children: ReactNode; wide?: boolean }) {
+export function FormDialog({ open, onClose, title, saveLabel = 'Save', onSave, children, wide, extra }: { open: boolean; onClose: () => void; title: string; saveLabel?: string; onSave: () => string | void; children: ReactNode; wide?: boolean; extra?: ReactNode }) {
   const [error, setError] = useState('')
   useEffect(() => {
     if (open) setError('')
@@ -158,6 +158,7 @@ export function FormDialog({ open, onClose, title, saveLabel = 'Save', onSave, c
       wide={wide}
       footer={
         <>
+          {extra && <span className="mr-auto">{extra}</span>}
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
@@ -211,3 +212,100 @@ export function DetailCard({ title, subtitle, onClose, children, label }: { titl
 
 /** Splits a textarea into lines. */
 export const linesOf = (s: string) => s.split('\n').map((l) => l.trim()).filter(Boolean)
+
+/** Summary tile that filters the list below it. Pressed while its filter is on. */
+export function FilterTile({ label, value, note, active, onClick, tone = 'neutral' }: { label: string; value: ReactNode; note?: string; active: boolean; onClick: () => void; tone?: 'neutral' | 'ok' | 'warn' | 'bad' | 'info' }) {
+  const dot = { neutral: 'bg-ink-3', ok: 'bg-palay', warn: 'bg-warn', bad: 'bg-sili', info: 'bg-brand-600' }[tone]
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={`rounded-2xl border px-4 py-3 text-left shadow-card transition ${active ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-100' : 'border-line bg-surface hover:border-brand-300'}`}
+    >
+      <span className="flex items-center gap-1.5 text-xs font-medium text-ink-2">
+        <span className={`size-2 rounded-full ${dot}`} aria-hidden />
+        {label}
+      </span>
+      <span className="block font-display text-xl font-bold text-charcoal tnum">{value}</span>
+      {note && <span className="block text-xs text-ink-3">{note}</span>}
+    </button>
+  )
+}
+
+/** Row of search and filters with a reset button that shows only while something is set. */
+export function FilterBar({ children, active, onReset, count, noun }: { children: ReactNode; active: boolean; onReset: () => void; count: number; noun: [string, string] }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
+      {children}
+      <span className="ml-auto text-sm text-ink-2 tnum" aria-live="polite">
+        {count} {count === 1 ? noun[0] : noun[1]}
+      </span>
+      {active && (
+        <button type="button" onClick={onReset} className="h-9 rounded-lg px-3 text-sm font-semibold text-brand-700 hover:bg-brand-50">
+          Reset filters
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** Empty list: says whether filters hide everything, and offers to clear them. */
+export function EmptyList({ filtered, onReset, children }: { filtered: boolean; onReset: () => void; children: ReactNode }) {
+  return (
+    <div className="px-4 py-10 text-center text-sm text-ink-2">
+      <p>{filtered ? 'Nothing matches these filters.' : children}</p>
+      {filtered && (
+        <button type="button" onClick={onReset} className="mt-2 font-semibold text-brand-700 hover:underline">
+          Reset filters
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** Activity history for one module, or one record of it. */
+export function ActivityHistory({ module, recordId, limit = 6, title = 'Activity history' }: { module: ActivityModule | ActivityModule[]; recordId?: string; limit?: number; title?: string }) {
+  const activity = useAdmin((s) => s.data.activity)
+  const [all, setAll] = useState(false)
+  const mods = Array.isArray(module) ? module : [module]
+  const list = (activity ?? []).filter((e) => mods.includes(e.module) && (!recordId || e.recordId === recordId))
+  const shown = all ? list : list.slice(0, limit)
+  return (
+    <section aria-label={title} className="mt-5 border-t border-line pt-4">
+      <h3 className="text-xs font-semibold tracking-wide text-ink-3 uppercase">{title}</h3>
+      {list.length === 0 ? (
+        <p className="mt-2 text-sm text-ink-2">No changes recorded yet.</p>
+      ) : (
+        <ol className="mt-2 space-y-3">
+          {shown.map((e) => (
+            <li key={e.id} className="text-sm">
+              <p className="text-ink">
+                <span className="font-semibold">{e.action}</span>
+                {!recordId && <> · {e.recordLabel}</>}
+                <span className="text-ink-2"> · {e.description}</span>
+              </p>
+              {e.changes && e.changes.length > 0 && (
+                <ul className="mt-1 space-y-0.5 text-xs text-ink-2">
+                  {e.changes.slice(0, 6).map((c, i) => (
+                    <li key={i}>
+                      {c.field}: <span className="line-through decoration-ink-3">{c.from}</span> → <span className="font-medium text-ink">{c.to}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-xs text-ink-3">
+                {e.actor} · {fmtStamp(e.at)} · {e.recordId}
+              </p>
+            </li>
+          ))}
+        </ol>
+      )}
+      {list.length > limit && (
+        <button type="button" onClick={() => setAll(!all)} className="mt-2 text-sm font-semibold text-brand-700 hover:underline">
+          {all ? 'Show fewer' : `Show all ${list.length}`}
+        </button>
+      )}
+    </section>
+  )
+}

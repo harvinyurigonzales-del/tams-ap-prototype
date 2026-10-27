@@ -1,14 +1,14 @@
 import { ArrowRight, CalendarDays, Check, Clock, MapPin, MessageCircleQuestion, PencilRuler, Users, X } from 'lucide-react'
 import { useEffect, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { isOffered } from '../../domain/packages'
-import { fromPrice } from '../../domain/recommend'
+import { isOffered, priceUnitOf } from '../../domain/packages'
 import { ratingOf, reviewsFor } from '../../domain/reviews'
 import { BALANCE_DUE_DAYS_BEFORE, BOOKING_CUTOFF_DAYS, DOWN_PAYMENT_RATE, promoFor, shortRange } from '../../domain/rules'
 import { DEMO_TODAY } from '../../lib/demoClock'
 import { fmtDate, fmtTime, peso } from '../../lib/format'
 import { useAssistant } from '../../state/assistant'
 import { useCustomer } from '../../state/customerStore'
+import type { Service } from '../../seed/types'
 import { Button, LinkButton } from '../../ui/Button'
 import { EmptyState } from '../../ui/EmptyState'
 import { Picture } from '../../ui/Picture'
@@ -29,7 +29,6 @@ export function TourDetails() {
   const { serviceId } = useParams()
   const data = useCustomer((s) => s.data)
   const markViewed = useCustomer((s) => s.markViewed)
-  const openWith = useAssistant((s) => s.openWith)
   const found = data.services.find((x) => x.id === serviceId && x.type === 'tour')
   const s = found && isOffered(found) ? found : undefined
   useEffect(() => {
@@ -37,20 +36,35 @@ export function TourDetails() {
   }, [s, markViewed])
   if (found && !s) return <UnavailableTour />
   if (!s) return <EmptyState title="Tour not found" action={<LinkButton to="/app/explore">Explore tours</LinkButton>} />
+  return <TourPage s={s} deps={departuresOf(data, s.id)} />
+}
+
+/**
+ * The customer tour page. Admins see the same layout in "Preview customer view", with unsaved form values and
+ * every booking action switched off, so previewing never publishes or opens the package.
+ */
+export function TourPage({ s, deps, preview = false }: { s: Service; deps: ReturnType<typeof departuresOf>; preview?: boolean }) {
+  const data = useCustomer((st) => st.data)
+  const openWith = useAssistant((st) => st.openWith)
   const dest = destinationOf(data, s)
-  const deps = departuresOf(data, s.id)
+  const image = s.image ?? dest?.image
   const open = deps.filter((d) => d.avail.state === 'open')
   const next = open[0]
-  const price = next ? fromPrice(data, s) : s.price
-  const reviews = reviewsFor(data, s.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  const price = next ? s.price - promoFor(next.dep, DEMO_TODAY) : s.price
+  const reviews = preview ? [] : reviewsFor(data, s.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   const rating = ratingOf(reviews)
+  const inert = (label: string) => (
+    <span className="inline-flex h-10 items-center rounded-full bg-surface-muted px-4 text-sm font-semibold text-ink-3" title="Preview only">
+      {label}
+    </span>
+  )
 
   return (
     <div>
-      <BackLink to="/app/explore" label="Explore" />
+      {!preview && <BackLink to="/app/explore" label="Explore" />}
       <div className="relative">
-        {dest ? (
-          <Picture image={dest.image} eager sizes="(min-width: 1180px) 1132px, 100vw" className="aspect-[4/3] rounded-[28px] sm:aspect-[16/8] lg:aspect-[21/8]" labelAt="tr" />
+        {image ? (
+          <Picture image={image} eager sizes="(min-width: 1180px) 1132px, 100vw" className="aspect-[4/3] rounded-[28px] sm:aspect-[16/8] lg:aspect-[21/8]" labelAt="tr" />
         ) : (
           <div className="aspect-[16/8] rounded-[28px] bg-sand" />
         )}
@@ -58,6 +72,7 @@ export function TourDetails() {
         <div className="absolute inset-x-0 bottom-0 p-5 text-white sm:p-8">
           <p className="flex flex-wrap items-center gap-2 text-sm text-white/90">
             <span className="rounded-full bg-white/92 px-2.5 py-1 text-xs font-semibold text-charcoal">Joiner tour</span>
+            {s.season && <span className="rounded-full bg-sili px-2.5 py-1 text-xs font-semibold text-white">{s.season}</span>}
             <span className="inline-flex items-center gap-1">
               <MapPin className="size-4" aria-hidden /> {s.destination}
             </span>
@@ -68,14 +83,15 @@ export function TourDetails() {
           </a>
         </div>
       </div>
-      {dest?.image.credit && <PhotoCreditLine credit={dest.image.credit} />}
+      {image?.credit && <PhotoCreditLine credit={image.credit} />}
 
       <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_380px]">
         <div className="min-w-0">
           <div className="flex items-start justify-between gap-4">
             <p className="max-w-2xl text-lg text-ink">{s.summary}</p>
-            <SaveButton item={{ kind: 'tour', id: s.id }} name={s.name} withLabel className="shrink-0" />
+            {!preview && <SaveButton item={{ kind: 'tour', id: s.id }} name={s.name} withLabel className="shrink-0" />}
           </div>
+          {s.description && <p className="mt-3 max-w-2xl text-[15px] text-ink-2">{s.description}</p>}
 
           <dl className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-[22px] bg-line ring-1 ring-line sm:grid-cols-3">
             <Fact icon={<Clock className="size-4" aria-hidden />} label="Length">
@@ -90,7 +106,7 @@ export function TourDetails() {
             <Fact icon={<Users className="size-4" aria-hidden />} label="Arrangement">
               Joiner tour, shared van
             </Fact>
-            <Fact label="Price">{peso(price)} per person</Fact>
+            <Fact label="Price">{peso(price)} per {priceUnitOf(s)}</Fact>
             <Fact label="Good for">{(s.interests ?? []).join(', ') || 'Everyone'}</Fact>
           </dl>
 
@@ -132,7 +148,8 @@ export function TourDetails() {
                       <p className={`text-sm font-semibold ${avail.state === 'open' ? (avail.left <= 4 ? 'text-sili' : 'text-palay') : 'text-ink-3'}`}>
                         {avail.state === 'open' ? `${avail.left} seats left` : avail.state === 'full' ? 'Full' : 'Booking closed'}
                       </p>
-                      {avail.state === 'open' && (
+                      {avail.state === 'open' && preview && inert('Book')}
+                      {avail.state === 'open' && !preview && (
                         <Link
                           to={`/app/tours/${s.id}/dates?d=${dep.id}`}
                           className="inline-flex h-10 items-center rounded-full bg-sili px-4 text-sm font-semibold text-white hover:bg-sili-600"
@@ -156,7 +173,7 @@ export function TourDetails() {
                 </h2>
                 <p className="mt-1 text-sm text-ink-2">Reviews from travellers who joined this tour. Only completed trips can be reviewed.</p>
               </div>
-              {rating.count > 0 && (
+              {rating.count > 0 && !preview && (
                 <Link to={`/app/reviews?tour=${s.id}`} className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700 hover:underline">
                   See all {rating.count} reviews <ArrowRight className="size-4" aria-hidden />
                 </Link>
@@ -206,7 +223,7 @@ export function TourDetails() {
 
         <aside className="lg:sticky lg:top-24 lg:self-start">
           <div className="rounded-[22px] bg-surface p-6 ring-1 ring-line">
-            <PriceTag price={price} was={next && price < s.price ? s.price : undefined} size="lg" />
+            <PriceTag price={price} was={next && price < s.price ? s.price : undefined} unit={priceUnitOf(s)} size="lg" />
             <a href="#reviews" className="mt-2 inline-flex hover:underline">
               <RatingBadge avg={rating.avg} count={rating.count} />
             </a>
@@ -223,7 +240,9 @@ export function TourDetails() {
               Pickup {fmtTime(s.pickupTime)} at {s.pickup}
             </p>
             <div className="mt-5 grid gap-2">
-              {next ? (
+              {preview ? (
+                <p className="rounded-xl bg-warn-bg px-3 py-2 text-sm text-warn">Preview only. Booking is switched off here.</p>
+              ) : next ? (
                 <LinkButton to={`/app/tours/${s.id}/dates`} size="lg" full>
                   <CalendarDays className="size-5" aria-hidden /> View dates
                 </LinkButton>
@@ -234,11 +253,13 @@ export function TourDetails() {
                   </LinkButton>
                 )
               )}
-              <Button variant="ghost" full icon={<MessageCircleQuestion className="size-4" aria-hidden />} onClick={() => openWith({ kind: 'tour', id: s.id })}>
-                Ask about this tour
-              </Button>
+              {!preview && (
+                <Button variant="ghost" full icon={<MessageCircleQuestion className="size-4" aria-hidden />} onClick={() => openWith({ kind: 'tour', id: s.id })}>
+                  Ask about this tour
+                </Button>
+              )}
             </div>
-            {dest && (
+            {dest && !preview && (
               <p className="mt-4 border-t border-line pt-4 text-sm text-ink-2">
                 New to {dest.name}?{' '}
                 <Link to={`/app/destinations/${dest.id}`} className="font-semibold text-brand-700 hover:underline">

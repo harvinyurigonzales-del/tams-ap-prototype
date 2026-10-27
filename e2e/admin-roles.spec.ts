@@ -69,7 +69,7 @@ test('admin manages fleet, maintenance, staff, packages and chatbot answers', as
   await page.getByRole('button', { name: 'Baguio Weekend Escape details' }).click()
   await page.getByRole('button', { name: 'Delete' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Delete package' }).click()
-  await expect(page.getByRole('dialog').getByText(/Deactivate it instead/).first()).toBeVisible()
+  await expect(page.getByRole('dialog').getByText(/Archive it instead/).first()).toBeVisible()
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
 
   // Chatbot preset answers feed Ask TAMS.

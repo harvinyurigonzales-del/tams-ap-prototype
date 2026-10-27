@@ -21,6 +21,8 @@ export function promoFor(dep: Departure | undefined, createdDate: string) {
 /** R2: price per person minus promo, times pax. */
 export function tourTotal(service: Service, dep: Departure, pax: number, createdDate = DEMO_TODAY) {
   const promoOff = promoFor(dep, createdDate)
+  // A group price covers everyone on the booking; the promo then comes off once.
+  if (service.priceBasis === 'group') return { unitPrice: service.price, promoOff, total: service.price - promoOff }
   return { unitPrice: service.price, promoOff, total: (service.price - promoOff) * pax }
 }
 

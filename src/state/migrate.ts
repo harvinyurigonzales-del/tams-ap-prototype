@@ -1,11 +1,12 @@
 import { agreedOf, packageStatus } from '../domain/packages'
+import { addSeasonal } from '../seed/seasonal'
 import type { MaintenanceRecord } from '../seed/derive'
 import type { Dataset } from '../seed/types'
 
 // Saved data from earlier versions of the prototype is upgraded in place, step by step, so accounts, bookings and
 // customer progress survive an update. Each step only adds or fills in what that version introduced.
 
-export const DATA_VERSION = 2
+export const DATA_VERSION = 3
 
 interface Stored {
   v: number
@@ -35,6 +36,8 @@ export function normalize(d: Dataset) {
 const steps: Record<number, (s: Stored) => void> = {
   // v1 → v2: package statuses, booking snapshots, activity history, refunds, drafts and timeline previews.
   1: (s) => normalize(s.data),
+  // v2 → v3: seasonal package examples.
+  2: (s) => addSeasonal(s.data),
 }
 
 /** Upgrades a saved copy to the current version, or returns null when it cannot be read. */
