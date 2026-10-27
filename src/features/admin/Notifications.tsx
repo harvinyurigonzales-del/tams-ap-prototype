@@ -18,7 +18,7 @@ const CATEGORIES: NotificationCategory[] = ['Bookings', 'Payments', 'Travel', 'F
 export function AdminNotifications() {
   const { data, maintenance, markAllRead } = useAdmin()
   const [f, setF] = useState<Filter>('All')
-  const all = staffNotifications(data).sort((a, b) => b.at.localeCompare(a.at))
+  const all = staffNotifications(data)
   const list = all.filter((n) => f === 'All' || (f === 'Unread' ? !n.read : n.category === f))
   const unread = (c: NotificationCategory) => all.filter((n) => !n.read && n.category === c).length
   const k = dashboard(data)

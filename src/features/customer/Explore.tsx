@@ -240,13 +240,15 @@ function ExploreHeader({ f, set }: { f: ExploreFilter; set: (k: string, v: strin
           </div>
           <div className="relative hidden h-[220px] lg:block" aria-hidden>
             {pics.map((d, i) => (
-              <div
+              <Link
                 key={d.id}
-                className={`absolute w-[200px] overflow-hidden rounded-2xl shadow-pop ring-4 ring-white/90 ${['top-2 left-0 -rotate-6', 'top-0 left-[120px] z-10 rotate-2', 'top-8 left-[240px] rotate-6'][i]}`}
+                to={`/app/destinations/${d.id}`}
+                tabIndex={-1}
+                className={`absolute w-[200px] overflow-hidden rounded-2xl shadow-pop ring-4 ring-white/90 transition-transform hover:-translate-y-1 ${['top-2 left-0 -rotate-6', 'top-0 left-[120px] z-10 rotate-2', 'top-8 left-[240px] rotate-6'][i]}`}
               >
                 <Picture image={d.image} label={false} className="aspect-[4/3]" />
                 <p className="bg-white px-3 py-1.5 text-xs font-semibold text-charcoal">{d.name}</p>
-              </div>
+              </Link>
             ))}
           </div>
         </div>

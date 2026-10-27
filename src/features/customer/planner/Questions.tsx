@@ -1,5 +1,5 @@
 import {
-  ArrowLeft, ArrowRight, Bike, Briefcase, Camera, Compass, Heart, Info, Landmark, MapPin, Mountain, Plus, Sofa, Sparkles, Trees, User, Users, UtensilsCrossed, Waves,
+  ArrowLeft, ArrowRight, Bike, Briefcase, Camera, Compass, Heart, Info, Landmark, MapPin, Mountain, Plus, Sofa, Sparkles, Trees, User, UserPlus, Users, UtensilsCrossed, Waves,
 } from 'lucide-react'
 import { useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
@@ -59,7 +59,8 @@ const GROUP_ICON: Record<GroupType, ReactNode> = {
   Family: <Heart className="size-5" aria-hidden />,
   Couple: <Heart className="size-5" aria-hidden />,
   Officemates: <Briefcase className="size-5" aria-hidden />,
-  Other: <User className="size-5" aria-hidden />,
+  Solo: <User className="size-5" aria-hidden />,
+  Other: <UserPlus className="size-5" aria-hidden />,
 }
 const PACES: { value: TripPace; body: string }[] = [
   { value: 'Relaxed', body: 'Up to 2 stops a day with long breaks and about 2 hours of free time. Later starts.' },
@@ -363,7 +364,7 @@ function GroupQ({ a, set, errors }: QProps) {
               compact
               name="group-type"
               checked={g.type === t}
-              onChange={() => upd({ type: t, ...(t === 'Couple' ? { size: 2, children: 0 } : g.size < 1 ? { size: t === 'Family' ? 5 : 6 } : {}) })}
+              onChange={() => upd({ type: t, ...(t === 'Couple' ? { size: 2, children: 0 } : t === 'Solo' ? { size: 1, children: 0, seniors: Math.min(g.seniors, 1) } : g.size < 1 ? { size: t === 'Family' ? 5 : 6 } : {}) })}
               icon={GROUP_ICON[t]}
               title={t}
             />

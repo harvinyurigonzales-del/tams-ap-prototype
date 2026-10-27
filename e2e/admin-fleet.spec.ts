@@ -118,3 +118,15 @@ test('vans: condition change is logged with before and after, and a van with his
   await expect(page.getByRole('button', { name: 'Van 02 details' })).toBeVisible()
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/vans-1-inactive.png`, fullPage: true })
 })
+
+test('clicking anywhere on a van, driver or package row opens its details', async ({ page }) => {
+  await signIn(page)
+  await adminNav(page, 'Vehicles')
+  await page.getByRole('row', { name: /Van 04/ }).locator('td').nth(2).click()
+  await expect(page.getByRole('complementary', { name: 'Van 04 details' })).toBeVisible()
+  await adminNav(page, 'Tour packages')
+  const row = page.locator('tbody tr').first()
+  const name = (await row.getByRole('button').first().textContent())!.trim()
+  await row.locator('td').nth(1).click()
+  await expect(page.getByRole('complementary', { name: `${name} details` })).toBeVisible()
+})

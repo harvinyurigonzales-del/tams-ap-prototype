@@ -204,6 +204,7 @@ function tell(d: Dataset, customerId: string, at: string, n: Pick<AppNotificatio
 }
 
 /** Staff notifications only; customer notifications share the same list. */
+/** Newest first, in the order they arrived. Notices from the payment timeline preview carry a future time, so the time alone would put them above newer ones. */
 export const staffNotifications = (d: Dataset) => d.notifications.filter((n) => !n.customerId)
 
 const tripTitle = (d: Dataset, b: { serviceId: string; label?: string }) => b.label ?? d.services.find((x) => x.id === b.serviceId)?.name ?? 'your trip'

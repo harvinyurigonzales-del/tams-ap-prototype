@@ -157,7 +157,7 @@ function Shell() {
   const { data, logout, maintenance, markRead, markAllRead } = useAdmin()
   const me = useMe()
   const admin = me?.role === 'Admin'
-  const notes = useMemo(() => staffNotifications(data).sort((a, b) => b.at.localeCompare(a.at)), [data])
+  const notes = useMemo(() => staffNotifications(data), [data])
   const groups = GROUPS.map((g) => ({ ...g, items: g.items.filter((n) => admin || !n.adminOnly) })).filter((g) => g.items.length)
   const activeGroup = groups.find((g) => g.items.some((n) => isActive(n, pathname)))?.title
   // Groups the person opened or closed by hand; the group of the page being shown is always open.

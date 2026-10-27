@@ -75,3 +75,18 @@ test('Home starts with Saan tayo next for guests, and with your own rows once pr
   await expect(page.getByRole('link', { name: 'Edit preferences' })).toBeVisible()
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/home-for-you.png`, fullPage: true })
 })
+
+test('photos open their place, and the planner offers a solo trip', async ({ page }) => {
+  await page.goto('/app/explore?view=destinations')
+  const photo = page.locator('main article:has(a[href^="/app/destinations/"]) img[alt]:not([alt=""])').first()
+  await photo.scrollIntoViewIfNeeded()
+  const box = (await photo.boundingBox())!
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 3)
+  await expect(page).toHaveURL(/\/app\/destinations\//)
+
+  await page.goto('/app/custom/new')
+  await page.getByRole('button', { name: 'Try a sample trip' }).click()
+  while (!(await page.getByText('Who’s coming?').isVisible())) await page.getByRole('button', { name: /^Continue/ }).click()
+  await page.getByText('Solo', { exact: true }).click()
+  await expect(page.getByRole('spinbutton', { name: 'How many are travelling?' })).toHaveValue('1')
+})

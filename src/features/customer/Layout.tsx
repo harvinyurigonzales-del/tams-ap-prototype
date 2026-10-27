@@ -41,7 +41,8 @@ export function Shell() {
   const openAssistant = useAssistant((s) => s.openWith)
   const clearContext = useAssistant((s) => s.clearContext)
   const typing = useTyping()
-  const mine = customerId ? data.notifications.filter((n) => n.customerId === customerId).sort((a, b) => b.at.localeCompare(a.at)) : []
+  // Newest first, in the order they arrived (new notices are added to the front).
+  const mine = customerId ? data.notifications.filter((n) => n.customerId === customerId) : []
   const replies = customerId ? data.inquiries.filter((q) => q.customerId === customerId && q.status === 'Staff replied').length : 0
 
   // The assistant's "asking about" context belongs to the page it was opened from.

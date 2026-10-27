@@ -148,9 +148,9 @@ export function Maintenance() {
             empty={rows.length === 0 && <EmptyList filtered={filtered} onReset={reset}>No maintenance on record yet.</EmptyList>}
           >
             {rows.map((m) => (
-              <tr key={m.id} className="hover:bg-surface-muted">
+              <tr key={m.id} onClick={() => setOpen(m.id)} className="cursor-pointer hover:bg-surface-muted">
                 <td className={td}>
-                  <button className="font-semibold text-brand-700 hover:underline" onClick={() => setOpen(m.id)} aria-label={`${vanName(m.vehicleId)} · ${m.type}`}>
+                  <button className="font-semibold text-brand-700 hover:underline" onClick={(e) => { e.stopPropagation(); setOpen(m.id) }} aria-label={`${vanName(m.vehicleId)} · ${m.type}`}>
                     {vanName(m.vehicleId)}
                   </button>
                   <span className="block text-xs text-ink-3">{m.id}</span>

@@ -108,9 +108,9 @@ export function Packages() {
               const next = openDeparturesOf(data, s.id)[0]
               const st = packageStatus(s)
               return (
-                <tr key={s.id} className={sel?.id === s.id ? 'bg-brand-50' : 'hover:bg-surface-muted'}>
+                <tr key={s.id} onClick={() => setParams({ id: s.id })} className={`cursor-pointer ${sel?.id === s.id ? 'bg-brand-50' : 'hover:bg-surface-muted'}`}>
                   <td className={td}>
-                    <button className="font-semibold text-brand-700 hover:underline" onClick={() => setParams({ id: s.id })} aria-label={`${s.name} details`}>
+                    <button className="font-semibold text-brand-700 hover:underline" onClick={(e) => { e.stopPropagation(); setParams({ id: s.id }) }} aria-label={`${s.name} details`}>
                       {s.name}
                     </button>
                     <span className="block text-xs text-ink-2">

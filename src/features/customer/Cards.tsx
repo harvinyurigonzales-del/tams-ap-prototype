@@ -170,7 +170,10 @@ export function DestinationCard({ dest, reason, footer }: { dest: Destination; r
   return (
     <article className="group relative flex h-full flex-col overflow-hidden rounded-[22px] bg-surface ring-1 ring-line transition-shadow hover:shadow-pop">
       <div className="relative">
-        <Picture image={dest.image} className="aspect-[5/4]" labelAt="tl" imgClassName="transition-transform duration-500 group-hover:scale-[1.03]" />
+        {/* The photo opens the place too; the name stays the one link for keyboards and screen readers. */}
+        <Link to={`/app/destinations/${dest.id}`} tabIndex={-1} aria-hidden className="block">
+          <Picture image={dest.image} className="aspect-[5/4]" labelAt="tl" imgClassName="transition-transform duration-500 group-hover:scale-[1.03]" />
+        </Link>
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/70 via-black/25 to-transparent" aria-hidden />
         <div className="absolute inset-x-0 bottom-0 p-5 text-white">
           <h3 className="type-head text-[28px]">

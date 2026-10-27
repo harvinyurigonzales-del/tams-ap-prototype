@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { bookingsPerWeek, dashboard, PERIODS, statusCounts } from '../../domain/metrics'
 import { money, shortRange } from '../../domain/rules'
 import { fmtDate, peso } from '../../lib/format'
@@ -13,6 +13,7 @@ import { ActivityList, customerOf, Kpi, serviceOf, Table, td } from './common'
 export function Dashboard() {
   const data = useAdmin((s) => s.data)
   const me = useMe()
+  const navigate = useNavigate()
   const admin = me?.role === 'Admin'
   const k = dashboard(data)
   const weeks = bookingsPerWeek(data)
@@ -67,7 +68,7 @@ export function Dashboard() {
             {recent.map((b) => {
               const m = money(b, data.payments)
               return (
-                <tr key={b.id}>
+                <tr key={b.id} onClick={() => navigate(`/admin/bookings?id=${b.id}`)} className="cursor-pointer hover:bg-surface-muted">
                   <td className={td}>
                     <span className="font-medium text-ink">{b.id}</span>
                     {b.origin === 'local' && <LocalTag />}
@@ -101,7 +102,7 @@ export function Dashboard() {
           >
             Recent activity
           </SectionTitle>
-          <ActivityList items={staffNotifications(data).sort((a, b) => b.at.localeCompare(a.at))} limit={5} />
+          <ActivityList items={staffNotifications(data)} limit={5} />
         </Card>
       </div>
     </div>

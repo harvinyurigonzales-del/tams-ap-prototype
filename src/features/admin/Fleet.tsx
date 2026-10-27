@@ -271,9 +271,9 @@ export function Vehicles() {
               const next = nextAssignment(data, { vehicleId: v.id })
               const n = flagged(v)
               return (
-                <tr key={v.id} className={sel?.id === v.id ? 'bg-brand-50' : 'hover:bg-surface-muted'}>
+                <tr key={v.id} onClick={() => setParams({ id: v.id })} className={`cursor-pointer ${sel?.id === v.id ? 'bg-brand-50' : 'hover:bg-surface-muted'}`}>
                   <td className={td}>
-                    <button className="font-semibold text-brand-700 hover:underline" onClick={() => setParams({ id: v.id })} aria-label={`${v.name} details`}>
+                    <button className="font-semibold text-brand-700 hover:underline" onClick={(e) => { e.stopPropagation(); setParams({ id: v.id }) }} aria-label={`${v.name} details`}>
                       {v.name}
                     </button>
                     {n > 0 && <span className="block text-xs font-semibold text-bad">{n} {n === 1 ? 'trip needs' : 'trips need'} reassignment</span>}
@@ -536,9 +536,9 @@ export function Drivers() {
               const next = nextAssignment(data, { driverId: d.id })
               const n = flagged(d)
               return (
-                <tr key={d.id} className={sel?.id === d.id ? 'bg-brand-50' : 'hover:bg-surface-muted'}>
+                <tr key={d.id} onClick={() => setParams({ id: d.id })} className={`cursor-pointer ${sel?.id === d.id ? 'bg-brand-50' : 'hover:bg-surface-muted'}`}>
                   <td className={td}>
-                    <button className="font-semibold text-brand-700 hover:underline" onClick={() => setParams({ id: d.id })} aria-label={`${d.name} details`}>
+                    <button className="font-semibold text-brand-700 hover:underline" onClick={(e) => { e.stopPropagation(); setParams({ id: d.id }) }} aria-label={`${d.name} details`}>
                       {d.name}
                     </button>
                     <span className="block text-xs text-ink-2">{d.id}</span>

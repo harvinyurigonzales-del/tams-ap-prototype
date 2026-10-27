@@ -454,7 +454,10 @@ function Spotlight() {
     <section className="mt-24 md:mt-32" aria-labelledby="spotlight">
       <div className="mx-auto max-w-[1280px] px-4 sm:px-6">
         <div className="relative grid lg:grid-cols-12">
-          <Picture image={dest.image} sizes="(min-width: 1024px) 66vw, 100vw" className="aspect-[4/3] rounded-[28px] lg:col-span-8 lg:col-start-1 lg:row-start-1 lg:aspect-auto lg:min-h-[640px]" labelAt="tl" />
+          {/* The photo opens the place; the links in the panel stay the ones for keyboards and screen readers. */}
+          <Link to={`/app/destinations/${dest.id}`} tabIndex={-1} aria-hidden className="block lg:col-span-8 lg:col-start-1 lg:row-start-1">
+            <Picture image={dest.image} sizes="(min-width: 1024px) 66vw, 100vw" className="aspect-[4/3] h-full rounded-[28px] lg:aspect-auto lg:min-h-[640px]" labelAt="tl" />
+          </Link>
           <div className="relative -mt-16 mx-3 rounded-[28px] bg-navy p-6 text-white shadow-pop sm:mx-8 sm:p-9 lg:col-span-5 lg:col-start-8 lg:row-start-1 lg:mx-0 lg:my-14 lg:self-center">
             <p className="text-sm font-semibold text-white/70">Konting layo, ibang mundo.</p>
             <h2 id="spotlight" className="mt-2 type-hero text-[46px] sm:text-[62px]">

@@ -11,8 +11,8 @@ import { PICKUP_OFFSET, PLACES, placeFor, type Attraction, type PlaceMeta, type 
 
 // ---------- Answers ----------
 
-export type GroupType = 'Barkada' | 'Family' | 'Couple' | 'Officemates' | 'Other'
-export const GROUP_TYPES: GroupType[] = ['Barkada', 'Family', 'Couple', 'Officemates', 'Other']
+export type GroupType = 'Barkada' | 'Family' | 'Couple' | 'Officemates' | 'Solo' | 'Other'
+export const GROUP_TYPES: GroupType[] = ['Barkada', 'Family', 'Couple', 'Officemates', 'Solo', 'Other']
 export type Lodging = 'No preference' | 'Budget' | 'Standard' | 'Comfort'
 export const LODGING: Lodging[] = ['No preference', 'Budget', 'Standard', 'Comfort']
 export const ROOM_RATE: Record<Lodging, number> = { 'No preference': CUSTOM_ROOM_RATE, Budget: 1800, Standard: CUSTOM_ROOM_RATE, Comfort: 3500 }
@@ -79,6 +79,7 @@ export function validateQuestion(q: QuestionId, a: PlannerAnswers, today = DEMO_
     if (!Number.isInteger(n) || n < 1) e.size = 'Enter how many are travelling.'
     else if (n > MAX_GROUP) e.size = `For groups over ${MAX_GROUP}, message our staff and we’ll plan it with you.`
     else if (a.group.type === 'Couple' && n !== 2) e.size = 'A couple trip is for 2. Choose “Other” for a different group.'
+    else if (a.group.type === 'Solo' && n !== 1) e.size = 'A solo trip is for 1. Choose “Other” for a different group.'
     if (a.group.children < 0 || a.group.seniors < 0) e.extra = 'Counts cannot be negative.'
     else if (n >= 1 && a.group.children + a.group.seniors > n) e.extra = 'Children and seniors are part of the total, so they cannot add up to more than the group.'
   }
@@ -503,7 +504,7 @@ export function estimate(plan: TripPlan, a: PlannerAnswers): Estimate {
   if (nights > 0) {
     lines.push({ group: 'shared', label: 'Driver overnight allowance', amount: DRIVER_OVERNIGHT_ALLOWANCE * vans * nights, unitPrice: DRIVER_OVERNIGHT_ALLOWANCE * vans, qty: nights, unit: 'night', detail: `${peso(DRIVER_OVERNIGHT_ALLOWANCE)} a night × ${nights}` })
     const rate = ROOM_RATE[plan.lodging]
-    lines.push({ group: 'shared', label: `${plan.lodging === 'No preference' ? 'Standard' : plan.lodging} hotel, ${rooms} ${rooms === 1 ? 'room' : 'rooms'}`, amount: rate * rooms * nights, unitPrice: rate * rooms, qty: nights, unit: 'night', detail: `${peso(rate)} a room a night × ${nights} ${nights === 1 ? 'night' : 'nights'}${a.group.type === 'Family' ? ', family rooms for 3' : ', twin sharing'}` })
+    lines.push({ group: 'shared', label: `${plan.lodging === 'No preference' ? 'Standard' : plan.lodging} hotel, ${rooms} ${rooms === 1 ? 'room' : 'rooms'}`, amount: rate * rooms * nights, unitPrice: rate * rooms, qty: nights, unit: 'night', detail: `${peso(rate)} a room a night × ${nights} ${nights === 1 ? 'night' : 'nights'}${a.group.type === 'Family' ? ', family rooms for 3' : size === 1 ? ', one guest' : ', twin sharing'}` })
   }
   lines.push({ group: 'person', label: 'Local guide and environmental fees', amount: CUSTOM_GUIDE_FEE * size, unitPrice: CUSTOM_GUIDE_FEE, qty: size, unit: 'person', detail: `${peso(CUSTOM_GUIDE_FEE)} × ${size}` })
   const stops = plan.days.flat()
