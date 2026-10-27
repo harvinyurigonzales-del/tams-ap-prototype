@@ -1,6 +1,7 @@
 import { ArrowRight, CalendarDays, Check, Clock, MapPin, MessageCircleQuestion, PencilRuler, Users, X } from 'lucide-react'
 import { useEffect, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { isOffered } from '../../domain/packages'
 import { fromPrice } from '../../domain/recommend'
 import { ratingOf, reviewsFor } from '../../domain/reviews'
 import { BALANCE_DUE_DAYS_BEFORE, BOOKING_CUTOFF_DAYS, DOWN_PAYMENT_RATE, promoFor, shortRange } from '../../domain/rules'
@@ -29,10 +30,12 @@ export function TourDetails() {
   const data = useCustomer((s) => s.data)
   const markViewed = useCustomer((s) => s.markViewed)
   const openWith = useAssistant((s) => s.openWith)
-  const s = data.services.find((x) => x.id === serviceId && x.type === 'tour')
+  const found = data.services.find((x) => x.id === serviceId && x.type === 'tour')
+  const s = found && isOffered(found) ? found : undefined
   useEffect(() => {
     if (s) markViewed('tour', s.id)
   }, [s, markViewed])
+  if (found && !s) return <UnavailableTour />
   if (!s) return <EmptyState title="Tour not found" action={<LinkButton to="/app/explore">Explore tours</LinkButton>} />
   const dest = destinationOf(data, s)
   const deps = departuresOf(data, s.id)
@@ -311,5 +314,16 @@ export function Inclusions({ inclusions, exclusions }: { inclusions: string[]; e
         </ul>
       </div>
     </section>
+  )
+}
+
+/** Shown for a package that is no longer offered, including on a saved or shared link. Existing bookings are unaffected. */
+export function UnavailableTour() {
+  return (
+    <EmptyState
+      title="This tour is not open for booking"
+      body="The package is no longer offered, so it cannot be booked. If you already have a booking, it stays as agreed in My Trips."
+      action={<LinkButton to="/app/explore">Explore other tours</LinkButton>}
+    />
   )
 }

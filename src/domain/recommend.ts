@@ -1,6 +1,7 @@
 import { DEMO_TODAY } from '../lib/demoClock'
 import { peso } from '../lib/format'
 import type { Dataset, Destination, Interest, SavedItem, Service, TravelPreferences } from '../seed/types'
+import { isOffered } from './packages'
 import { departureAvailability, promoFor } from './rules'
 
 // Simulated recommendations: deterministic, content-based scoring over the sample catalog. No machine
@@ -41,8 +42,8 @@ export function bookableDeparture(d: Dataset, serviceId: string, today = DEMO_TO
     .sort((a, b) => a.dep.startDate.localeCompare(b.dep.startDate))[0]
 }
 
-/** Tours that appear in the catalog. Recommendations only offer the ones with an open departure. */
-export const catalogTours = (d: Dataset) => d.services.filter((s) => s.type === 'tour')
+/** Active tours, the ones customers can find. Recommendations only offer the ones with an open departure. */
+export const catalogTours = (d: Dataset) => d.services.filter(isOffered)
 
 const durationOk = (days: number, pref: TravelPreferences['duration']) =>
   pref === 'Any' || (pref === 'Day trip' ? days === 1 : pref === 'Weekend (2–3 days)' ? days >= 2 && days <= 3 : days >= 4)

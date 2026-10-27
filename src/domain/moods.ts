@@ -1,3 +1,4 @@
+import { isOffered } from './packages'
 import { DEMO_TODAY } from '../lib/demoClock'
 import type { Dataset, Destination, Interest, Service } from '../seed/types'
 import { departureAvailability } from './rules'
@@ -30,7 +31,7 @@ export const MOODS: Mood[] = [
 
 export const moodById = (id: string | null | undefined) => MOODS.find((m) => m.id === id)
 
-const tours = (d: Dataset) => d.services.filter((s) => s.type === 'tour')
+const tours = (d: Dataset) => d.services.filter(isOffered)
 
 /** Moods that at least one tour in the catalog matches, with how many tours match each. */
 export function availableMoods(d: Dataset) {

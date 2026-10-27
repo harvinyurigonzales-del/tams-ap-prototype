@@ -1,7 +1,6 @@
 import { BadgeCheck, Lightbulb, MessageSquareReply, PenLine, Star } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
-import { catalogTours } from '../../domain/recommend'
 import { ratingFor, ratingOf, reviewedTrips, reviewEligibility, validateReview, type ReviewSort } from '../../domain/reviews'
 import { fmtDate, fmtRange } from '../../lib/format'
 import { useCustomer } from '../../state/customerStore'
@@ -37,7 +36,8 @@ export function ReviewsPage() {
 
   const all = data.reviews
   const overall = ratingOf(all)
-  const tours = catalogTours(data)
+  // Past reviews stay readable after a package is deactivated.
+  const tours = data.services.filter((s) => s.type === 'tour')
   const ranked = tours
     .map((s) => ({ s, r: ratingFor(data, s.id) }))
     .filter((x) => x.r.count > 0)

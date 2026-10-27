@@ -773,5 +773,9 @@ export const canonical: Dataset = Object.freeze<Dataset>({
   ],
   reviews: REVIEWS,
   salesHistory: SALES_HISTORY,
-  next: { booking: 149, payment: 193, assignment: 7, notification: 108, customer: 12, customRequest: 13, rentalRequest: 7, inquiry: 5, review: 1501 },
+  activity: [],
+  refunds: [],
+  drafts: [],
+  previews: [],
+  next: { booking: 149, payment: 193, assignment: 7, notification: 108, customer: 12, customRequest: 13, rentalRequest: 7, inquiry: 5, review: 1501, activity: 1, refund: 1, draft: 1 },
 })

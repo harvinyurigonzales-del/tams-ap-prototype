@@ -2,6 +2,7 @@ import type { ChatPreset } from '../domain/assistant'
 import { primeDemoClock } from '../lib/demoClock'
 import { sharedSeed, type MaintenanceRecord } from '../seed/derive'
 import type { Dataset } from '../seed/types'
+import { DATA_VERSION, upgrade } from './migrate'
 
 // One saved copy of the business data, shared by the customer site and the admin portal in this browser.
 // Records live in localStorage, so they survive a refresh, a logout and switching between customer and staff
@@ -12,7 +13,7 @@ import type { Dataset } from '../seed/types'
 
 export const DATA_KEY = 'tams-ap-data-v1'
 export const SESSION_KEY = 'tams-ap-session-v1'
-const VERSION = 1
+const VERSION = DATA_VERSION
 
 /** Customer login details. */
 export interface CustomerAccount {
@@ -51,8 +52,7 @@ function read(): Saved | null {
   try {
     const raw = storage('local')?.getItem(DATA_KEY)
     if (!raw) return null
-    const s = JSON.parse(raw) as Saved
-    return s && s.v === VERSION && s.data?.bookings ? s : null
+    return upgrade(JSON.parse(raw) as Saved)
   } catch {
     return null
   }
@@ -67,7 +67,7 @@ let start: Saved | null = null
 /** The data the stores start from: the saved copy, or a fresh seed the first time this browser opens the app. */
 export function startingState(): Saved {
   if (!start) {
-    start = read() ?? { v: VERSION, ...sharedSeed() }
+    start = read() ?? seeded()
     primeDemoClock(stampsOf(start.data))
   }
   return start
@@ -75,6 +75,10 @@ export function startingState(): Saved {
 
 /** A fresh copy of the sample data, for "Reset all sample data". */
 export function freshState(): Saved {
+  return seeded()
+}
+
+function seeded(): Saved {
   return { v: VERSION, ...sharedSeed() }
 }
 
@@ -103,8 +107,8 @@ export function clearSaved() {
 export function parseSaved(raw: string | null): Saved | null {
   if (!raw) return null
   try {
-    const s = JSON.parse(raw) as Saved
-    if (s?.v !== VERSION || !s.data?.bookings) return null
+    const s = upgrade(JSON.parse(raw) as Saved)
+    if (!s) return null
     lastWritten = raw
     primeDemoClock(stampsOf(s.data))
     return s

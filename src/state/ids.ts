@@ -11,6 +11,9 @@ const PREFIX: Record<Kind, (n: number) => string> = {
   rentalRequest: (n) => `VR-2026-${String(n).padStart(4, '0')}`,
   inquiry: (n) => `INQ-2026-${String(n).padStart(4, '0')}`,
   review: (n) => `RV-${String(n).padStart(4, '0')}`,
+  activity: (n) => `ACT-${String(n).padStart(4, '0')}`,
+  refund: (n) => `RF-2026-${String(n).padStart(4, '0')}`,
+  draft: (n) => `DR-${String(n).padStart(4, '0')}`,
 }
 
 /** Returns the next ID of a kind and advances the counter on the (draft) dataset. */

@@ -2,7 +2,7 @@ import { ArrowUpRight, CalendarDays, ChevronRight, CircleDollarSign, MapPin, Mes
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { availableMoods, departureInWindow } from '../../domain/moods'
-import { recommendationRows, type RecItem, type RecRow } from '../../domain/recommend'
+import { catalogTours, recommendationRows, type RecItem, type RecRow } from '../../domain/recommend'
 import { proposalExpired } from '../../domain/requests'
 import { BALANCE_DUE_DAYS_BEFORE, DOWN_PAYMENT_RATE, money, payableOptions, promoFor } from '../../domain/rules'
 import { DEMO_TODAY } from '../../lib/demoClock'
@@ -28,7 +28,7 @@ const FADE_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
 /** The destination given the large storytelling feature: a real photo and a scheduled joiner tour. */
 const SPOTLIGHT_DESTINATION = 'DST-BAGUIO'
 
-const tours = (d: Dataset) => d.services.filter((s) => s.type === 'tour')
+const tours = (d: Dataset) => catalogTours(d)
 
 export function Home() {
   const me = useMe()

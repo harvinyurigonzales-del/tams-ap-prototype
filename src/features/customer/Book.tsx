@@ -1,6 +1,8 @@
 import { CheckCircle2, Minus, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { isOffered } from '../../domain/packages'
+import { UnavailableTour } from './Tours'
 import { balanceDueDate, departureAvailability, downPayment, money, promoFor, rentalDays } from '../../domain/rules'
 import { DEMO_TODAY } from '../../lib/demoClock'
 import { fmtDate, fmtRange, fmtTime, peso } from '../../lib/format'
@@ -66,6 +68,7 @@ export function BookingForm() {
   const [confirm, setConfirm] = useState(false)
 
   if (!dep || !service) return <EmptyState title="Departure not found" action={<LinkButton to="/app">Back to Explore</LinkButton>} />
+  if (!isOffered(service)) return <UnavailableTour />
   const avail = departureAvailability(dep, data.bookings)
   if (avail.state !== 'open')
     return (
@@ -220,7 +223,7 @@ export function ReviewBlock({ title, onChange, children }: { title: string; onCh
   )
 }
 
-export const bookingTitle = (b: Booking, s: Service) => b.label ?? (b.rental ? `${s.name} · ${b.rental.destination}` : s.name)
+export const bookingTitle = (b: Booking, s: Service) => b.label ?? (b.rental ? `${s.name} · ${b.rental.destination}` : b.agreed?.title ?? s.name)
 
 export function BookingReceived() {
   const { bookingId } = useParams()

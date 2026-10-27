@@ -88,8 +88,38 @@ export interface Service {
   /** Tours belong to a destination; van rental and custom trips do not. */
   destinationId?: string
   interests?: Interest[]
-  /** Deactivated packages stay on past bookings but take no new departures. */
+  /** Deactivated packages stay on past bookings but take no new departures. Kept in step with `status`. */
   inactive?: boolean
+  /** Publication status of a tour package. Missing means Active (records saved before statuses existed). */
+  status?: PackageStatus
+  /** How the price is counted: per traveller (default) or one price for the whole group. */
+  priceBasis?: 'person' | 'group'
+  /** Seats on a new departure unless the departure sets its own. */
+  capacity?: number
+  /** Season or occasion the package is marketed for. A label only: departure dates are set separately. */
+  season?: string
+  /** Package photo. Missing means the destination photo is used. */
+  image?: ImageRef
+  /** Longer description for the tour page; the summary is the short line on cards. */
+  description?: string
+  /** Set on a copy until an admin has checked its departure dates; activation needs it. */
+  datesUnreviewed?: boolean
+  copiedFrom?: string
+}
+
+export type PackageStatus = 'Draft' | 'Active' | 'Inactive' | 'Archived'
+
+/** What the customer agreed to when booking, kept on the booking so later package edits do not change it. */
+export interface AgreedTerms {
+  title: string
+  duration: string
+  pickup: string
+  /** 'HH:MM', Asia/Manila. The departure time the payment deadlines count back from. */
+  pickupTime: string
+  itinerary: string[]
+  inclusions: string[]
+  exclusions: string[]
+  priceBasis: 'person' | 'group' | 'day' | 'quote'
 }
 
 export interface Departure {
@@ -128,8 +158,18 @@ export interface Booking {
   requestId?: string
   /** Display title for bookings that come from a request, e.g. "Banaue custom trip". */
   label?: string
+  /** Snapshot of the agreed package details. */
+  agreed?: AgreedTerms
+  /** Who cancelled: the customer (approved request), staff, or the payment-deadline rule. */
+  cancelledBy?: 'customer' | 'staff' | 'system'
+  /** Payment-deadline stages already handled, so repeated checks never notify or cancel twice. */
+  deadlineLog?: DeadlineStage[]
+  /** Final payment cutoff set by staff after a rejected payment (replaces the grace-period end). */
+  revisedCutoff?: string
   origin: Origin
 }
+
+export type DeadlineStage = 'reminder' | 'due' | 'overdue' | 'cancelled' | 'hold' | 'resolution'
 
 export interface Payment {
   id: string
@@ -148,6 +188,8 @@ export interface Payment {
 }
 
 export interface Block {
+  /** Set on blocks added or edited by staff, so a restriction can be changed or removed. */
+  id?: string
   from: string
   to: string
   kind: 'maintenance' | 'unavailable' | 'leave'
@@ -180,7 +222,14 @@ export interface Vehicle {
   blocks: Block[]
   color?: string
   odometer?: number
+  /** Inactive vans keep their history but take no new trips. Missing means active. */
+  active?: boolean
+  condition?: VehicleCondition
+  photo?: string
 }
+
+/** Roadworthiness, separate from maintenance bookings and from manual unavailability. */
+export type VehicleCondition = 'Good' | 'Minor issues' | 'Not roadworthy'
 
 export interface Driver {
   id: string
@@ -190,6 +239,12 @@ export interface Driver {
   license?: string
   licenseExpiry?: string
   since?: string
+  email?: string
+  /** Address or service base, e.g. "Malolos garage". */
+  base?: string
+  /** Inactive drivers keep their trip history but cannot be assigned. Missing means active. */
+  active?: boolean
+  photo?: string
 }
 
 export interface Assignment {
@@ -216,6 +271,8 @@ export interface AppNotification {
   customerId?: string
   /** Staff notifications about a customer's activity, so that customer's records can be cleared with it. */
   about?: string
+  /** Booking this notice is about, for payment-deadline notices (used to undo a presentation scenario). */
+  ref?: string
   scenario?: string
   origin: Origin
 }
@@ -460,8 +517,76 @@ export interface Dataset {
   inquiries: Inquiry[]
   replies: ApprovedReply[]
   reviews: Review[]
+  /** Who changed what in the admin modules. Newest first. */
+  activity: ActivityEntry[]
+  /** Refund reviews opened when a booking with verified payments is cancelled. */
+  refunds: RefundReview[]
+  /** Saved trip-planner and request drafts, per customer. */
+  drafts: TripDraft[]
+  /** Payment timelines being previewed for one booking each (presentation utility). */
+  previews: TimelinePreview[]
   /** Monthly sales before the demo month (sample history for the forecast). */
   salesHistory: MonthlySales[]
   /** Next sequence numbers for records created during the demo. */
-  next: { booking: number; payment: number; assignment: number; notification: number; customer: number; customRequest: number; rentalRequest: number; inquiry: number; review: number }
+  next: { booking: number; payment: number; assignment: number; notification: number; customer: number; customRequest: number; rentalRequest: number; inquiry: number; review: number; activity: number; refund: number; draft: number }
+}
+
+export type ActivityModule = 'Packages' | 'Maintenance' | 'Drivers' | 'Vans' | 'Payments'
+
+export interface ActivityChange {
+  field: string
+  from: string
+  to: string
+}
+
+export interface ActivityEntry {
+  id: string
+  at: string
+  /** Name and role of whoever made the change, or "System" for automatic rules. */
+  actor: string
+  module: ActivityModule
+  recordId: string
+  recordLabel: string
+  action: string
+  description: string
+  changes?: ActivityChange[]
+}
+
+export type RefundStatus = 'Pending review' | 'Approved' | 'Processed' | 'No refund due'
+
+export interface RefundReview {
+  id: string
+  bookingId: string
+  customerId: string
+  createdAt: string
+  /** Why the booking was cancelled, e.g. "Payment deadline missed". */
+  reason: string
+  cancelledBy: 'customer' | 'staff' | 'system'
+  /** Verified payments when the review opened. */
+  paid: number
+  /** Itemised deductions. None apply until the agency sets a deduction policy. */
+  deductions: { label: string; amount: number; reason: string }[]
+  proposed: number
+  status: RefundStatus
+  decision?: { by: string; at: string; note: string; amount: number }
+  processed?: { by: string; at: string; method: string; reference: string; date: string; note?: string }
+}
+
+export interface TripDraft {
+  id: string
+  customerId: string
+  kind: 'planner' | 'custom' | 'rental'
+  title: string
+  destination: string
+  updatedAt: string
+  /** The saved form or planner state, as the screen keeps it. */
+  payload: unknown
+}
+
+export interface TimelinePreview {
+  bookingId: string
+  /** Effective time for this booking only, as an ISO timestamp. */
+  at: string
+  /** Copy of the booking's records before the preview started, put back by Restore. */
+  saved: { booking: Booking; payments: Payment[]; refunds: RefundReview[]; assignments: Assignment[]; notificationIds: string[] }
 }

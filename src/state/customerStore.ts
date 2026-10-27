@@ -1,7 +1,8 @@
 import { create } from 'zustand'
-import { addDays, DEMO_TODAY, dateOf, demoNowStamp } from '../lib/demoClock'
+import { addDays, DEMO_TODAY, dateOf, daysBetween, demoNowStamp } from '../lib/demoClock'
 import { peso } from '../lib/format'
 import type { AssistantAnswer } from '../domain/assistant'
+import { agreedFrom, CUSTOM_PICKUP_TIME, isOffered } from '../domain/packages'
 import { recKey, type RecKind } from '../domain/recommend'
 import {
   canTransition, draftCustomProposal, PROPOSAL_VALID_DAYS, proposalExpired, rentalEndDate, rentalEstimate, requestDestination, validateCustom, validateRental,
@@ -328,6 +329,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     if (!service) return { ok: false, error: 'This service is no longer available.' }
     const createdAt = demoNowStamp()
     if (service.type !== 'tour') return { ok: false, error: 'Van rentals and custom trips start with a request.' }
+    if (!isOffered(service)) return { ok: false, error: 'This tour is no longer offered, so it cannot be booked.' }
     const dep = data.departures.find((x) => x.id === input.departureId)
     if (!dep) return { ok: false, error: 'Please choose a departure date.' }
     const avail = departureAvailability(dep, data.bookings)
@@ -337,7 +339,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     const price = tourTotal(service, dep, input.pax, dateOf(createdAt))
     const booking: Booking = {
       id: nextId(data, 'booking'), customerId: s.customerId, serviceId: service.id, departureId: dep.id,
-      startDate: dep.startDate, endDate: dep.endDate, pax: input.pax, ...price, status: 'Pending', createdAt,
+      startDate: dep.startDate, endDate: dep.endDate, pax: input.pax, ...price, status: 'Pending', createdAt, agreed: agreedFrom(service),
       contactName: input.contactName.trim(), contactMobile: input.contactMobile.trim(), notes: input.notes?.trim() || undefined, origin: 'local',
     }
     data.bookings.push(booking)
@@ -538,6 +540,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
       id: nextId(data, 'booking'), customerId: r.customerId, serviceId: 'SVC-CUSTOM', startDate: p.startDate, endDate: p.endDate, pax: p.groupSize,
       unitPrice: p.total, promoOff: 0, total: p.total, status: 'Pending', createdAt: at, contactName: r.contactName, contactMobile: r.contactMobile,
       notes: r.requests || undefined, requestId: r.id, label: p.title, rental: { pickup: r.pickup, destination: dest.name }, origin: 'local',
+      agreed: { title: p.title, duration: `${daysBetween(p.startDate, p.endDate) + 1} days`, pickup: r.pickup, pickupTime: CUSTOM_PICKUP_TIME, itinerary: [...p.itinerary], inclusions: [...p.inclusions], exclusions: [...p.exclusions], priceBasis: 'quote' },
     }
     data.bookings.push(booking)
     r.status = 'Accepted'
@@ -567,6 +570,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
       unitPrice: cat.ratePerDay, promoOff: 0, total: r.quote.total, status: 'Pending', createdAt: at, contactName: r.contactName,
       contactMobile: r.contactMobile, notes: r.requests || undefined, rental: { pickup: r.pickup, destination: r.dropoff }, requestId: r.id,
       label: `${cat.name} to ${r.dropoff}`, origin: 'local',
+      agreed: { title: `${cat.name} to ${r.dropoff}`, duration: `${daysBetween(r.startDate, r.endDate) + 1} days`, pickup: r.pickup, pickupTime: r.startTime || CUSTOM_PICKUP_TIME, itinerary: r.stops.length ? [...r.stops] : [], inclusions: [], exclusions: [], priceBasis: 'day' },
     }
     data.bookings.push(booking)
     r.status = 'Accepted'

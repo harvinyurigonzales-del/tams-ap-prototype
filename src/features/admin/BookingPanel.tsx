@@ -2,6 +2,7 @@ import { demoReceiptSrc } from '../../lib/receipt'
 import { CarFront, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { agreedOf } from '../../domain/packages'
 import { assignableTargets, canCancel, canConfirm, money, rentalDays, shortRange } from '../../domain/rules'
 import { fmtDate, fmtRange, fmtStamp, fmtTime, peso } from '../../lib/format'
 import { useAdmin } from '../../state/adminStore'
@@ -88,7 +89,7 @@ export function BookingPanel({ bookingId, onClose }: { bookingId: string; onClos
             )}
             <p className="text-sm text-ink-2">{fmtRange(b.startDate, b.endDate)}</p>
             <p className="text-sm text-ink-2">
-              {b.rental ? `${b.rental.pickup} → ${b.rental.destination}, ${rentalDays(b.startDate, b.endDate)} days` : `Pickup ${fmtTime(s.pickupTime)}, ${s.pickup}`}
+              {b.rental ? `${b.rental.pickup} → ${b.rental.destination}, ${rentalDays(b.startDate, b.endDate)} days` : `Pickup ${fmtTime(agreedOf(data, b).pickupTime)}, ${agreedOf(data, b).pickup}`}
             </p>
             <p className="text-sm text-ink-2">{b.pax} pax · booked {fmtStamp(b.createdAt)}</p>
             {b.notes && <p className="mt-1 text-sm text-ink-2">Notes: {b.notes}</p>}

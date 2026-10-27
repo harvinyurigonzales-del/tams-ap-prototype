@@ -1,6 +1,7 @@
 import { BusFront, CalendarDays, CheckSquare, ChevronRight, ClipboardList, PencilRuler, Phone, Square, Ticket } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { agreedOf } from '../../domain/packages'
 import { canCancel, money, payableOptions } from '../../domain/rules'
 import { requestDestination } from '../../domain/requests'
 import { daysBetween, DEMO_TODAY } from '../../lib/demoClock'
@@ -213,7 +214,8 @@ export function TripDetails() {
   const canPay = payableOptions(b, data.payments).length > 0
   const cancelCheck = canCancel(b)
   const reqLink = b.requestId?.startsWith('CR-') ? `/app/custom/${b.requestId}` : b.requestId ? `/app/rentals/${b.requestId}` : undefined
-  const pickup = b.rental ? `${b.rental.pickup}${s.type === 'van' ? `, ${fmtTime(data.rentalRequests.find((r) => r.id === b.requestId)?.startTime || s.pickupTime)}` : ''}` : `${s.pickup}, ${fmtTime(s.pickupTime)}`
+  const agreed = agreedOf(data, b)
+  const pickup = b.rental ? `${b.rental.pickup}${s.type === 'van' ? `, ${fmtTime(agreed.pickupTime)}` : ''}` : `${agreed.pickup}, ${fmtTime(agreed.pickupTime)}`
   const showPreTravel = b.status === 'Confirmed' && b.startDate >= DEMO_TODAY
 
   return (
@@ -259,6 +261,30 @@ export function TripDetails() {
               <p className="mt-4 rounded-xl bg-warn-bg px-4 py-3 text-sm text-warn">Cancellation requested. The agency will contact you about it.</p>
             )}
           </Card>
+
+          {agreed.itinerary.length > 0 && b.serviceId !== 'SVC-VAN' && (
+            <Card className="p-5">
+              <details>
+                <summary className="cursor-pointer type-head text-[22px] text-charcoal">Your agreed plan</summary>
+                <p className="mt-1 text-xs text-ink-2">As agreed when you booked. Later changes to the package do not change your booking.</p>
+                <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-ink">
+                  {agreed.itinerary.map((l, i) => (
+                    <li key={i}>{l}</li>
+                  ))}
+                </ol>
+                {agreed.inclusions.length > 0 && (
+                  <p className="mt-3 text-sm text-ink-2">
+                    <span className="font-semibold text-ink">Included:</span> {agreed.inclusions.join(', ')}
+                  </p>
+                )}
+                {agreed.exclusions.length > 0 && (
+                  <p className="mt-1 text-sm text-ink-2">
+                    <span className="font-semibold text-ink">Not included:</span> {agreed.exclusions.join(', ')}
+                  </p>
+                )}
+              </details>
+            </Card>
+          )}
 
           {showPreTravel && <PreTravel booking={b} />}
 
@@ -353,7 +379,8 @@ function PreTravel({ booking: b }: { booking: Booking }) {
   const destId = s.destinationId ?? data.customRequests.find((r) => r.id === b.requestId)?.destinationId
   const dest = data.destinations.find((x) => x.id === destId)
   const days = daysBetween(DEMO_TODAY, b.startDate)
-  const pickupTime = b.departureId ? fmtTime(s.pickupTime) : data.rentalRequests.find((r) => r.id === b.requestId)?.startTime ? fmtTime(data.rentalRequests.find((r) => r.id === b.requestId)!.startTime) : 'as agreed with staff'
+  const agreed = agreedOf(data, b)
+  const pickupTime = b.departureId || b.serviceId === 'SVC-VAN' ? fmtTime(agreed.pickupTime) : 'as agreed with staff'
   const items = [
     { id: 'id', label: 'Bring a valid ID and your booking reference' },
     { id: 'pickup', label: `Be at the pickup point 15 minutes before ${pickupTime}` },
@@ -378,7 +405,7 @@ function PreTravel({ booking: b }: { booking: Booking }) {
         <div>
           <dt className="text-ink-2">Pickup</dt>
           <dd className="font-medium text-ink">
-            {b.rental ? b.rental.pickup : s.pickup}, {pickupTime}
+            {b.rental ? b.rental.pickup : agreed.pickup}, {pickupTime}
           </dd>
         </div>
         <div>

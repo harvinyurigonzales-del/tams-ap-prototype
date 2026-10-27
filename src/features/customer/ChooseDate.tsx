@@ -1,6 +1,8 @@
 import { ChevronLeft, ChevronRight, Clock, MapPin, Minus, Plus, Tag } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { isOffered } from '../../domain/packages'
+import { UnavailableTour } from './Tours'
 import { BOOKING_CUTOFF_DAYS, promoFor, shortRange } from '../../domain/rules'
 import { addDays, DEMO_TODAY, weekday } from '../../lib/demoClock'
 import { fmtDate, fmtRange, fmtTime, monthLabel, peso, shortDay } from '../../lib/format'
@@ -17,7 +19,8 @@ export function ChooseDate() {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const data = useCustomer((s) => s.data)
-  const service = data.services.find((s) => s.id === serviceId && s.type === 'tour')
+  const found = data.services.find((s) => s.id === serviceId && s.type === 'tour')
+  const service = found && isOffered(found) ? found : undefined
   const deps = service ? departuresOf(data, service.id) : []
   const selected = deps.find((d) => d.dep.id === params.get('d') && d.avail.state === 'open')
   const firstMonth = (selected ?? deps.find((d) => d.avail.state === 'open') ?? deps[0])?.dep.startDate.slice(0, 7) ?? DEMO_TODAY.slice(0, 7)
@@ -30,6 +33,7 @@ export function ChooseDate() {
     setParams(next, { replace: true })
   }
 
+  if (found && !service) return <UnavailableTour />
   if (!service) return <EmptyState title="Trip not found" action={<LinkButton to="/app">Back to Explore</LinkButton>} />
 
   const [y, m] = month.split('-').map(Number)

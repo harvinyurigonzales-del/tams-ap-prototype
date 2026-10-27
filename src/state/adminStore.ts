@@ -5,6 +5,7 @@ import { canTransition, draftCustomProposal, PROPOSAL_VALID_DAYS, requestDestina
 import { assignableTargets, canCancel, canConfirm, driverConflict, money, shortRange, vehicleConflict } from '../domain/rules'
 import type { MaintenanceRecord } from '../seed/derive'
 import type { AppNotification, CustomRequest, Dataset, Driver, Proposal, RentalRequest, Service, Vehicle } from '../seed/types'
+import { setStatus } from '../domain/packages'
 import { nextId } from './ids'
 import { freshState, markSignedOut, readSession, startingState, writeSession } from './persist'
 
@@ -681,7 +682,7 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const data = structuredClone(s.data)
     const svc = data.services.find((v) => v.id === id)
     if (!svc) return fail('Package not found.')
-    svc.inactive = !active
+    setStatus(svc, active ? 'Active' : 'Inactive')
     activity(data, demoNowStamp(), { category: 'Bookings', title: active ? 'Tour package reactivated' : 'Tour package deactivated', body: svc.name, link: `/admin/packages?id=${id}` })
     set({ data })
     return OK

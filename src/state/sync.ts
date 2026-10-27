@@ -1,6 +1,7 @@
 import { useAdmin } from './adminStore'
 import { useChatbot } from './chatbot'
 import { useCustomer } from './customerStore'
+import { DATA_VERSION } from './migrate'
 import { DATA_KEY, parseSaved, writeSaved, type Saved } from './persist'
 
 // Keeps the customer site, the staff portal, the saved copy and other open tabs on the same records.
@@ -13,7 +14,7 @@ let queued = false
 function snapshot(): Saved {
   const a = useAdmin.getState()
   return {
-    v: 1,
+    v: DATA_VERSION,
     data: a.data,
     maintenance: a.maintenance,
     staffAccounts: a.accounts,
