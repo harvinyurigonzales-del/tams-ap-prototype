@@ -18,9 +18,13 @@ test('staff do not see admin-only modules, and a direct link shows the lock scre
   await page.getByRole('button', { name: 'Van 03 details' }).click()
   await expect(page.getByRole('complementary', { name: 'Van 03 details' }).getByText(/View only/)).toBeVisible()
   await adminNav(page, 'Maintenance')
+  await page.getByRole('tab', { name: 'Calendar' }).click()
   await expect(page.getByRole('heading', { name: 'October 2026' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Schedule maintenance' })).toHaveCount(0)
+  await page.getByRole('button', { name: /^Van 05 · Oil change and brake check/ }).first().click()
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).last()).toBeVisible()
   await expect(page.getByRole('button', { name: 'Mark done' })).toHaveCount(0)
+  await page.keyboard.press('Escape')
 
   // The avatar opens Account settings; General is read-only for staff.
   await page.getByRole('link', { name: /Account settings/ }).click()
@@ -53,11 +57,18 @@ test('admin manages fleet, maintenance, staff, packages and chatbot answers', as
 
   await adminNav(page, 'Maintenance')
   await expect(page.getByText(/Van 05 is past the scheduled maintenance date/)).toBeVisible()
-  await page.getByRole('button', { name: 'Mark done' }).click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Confirm done' }).click()
+  await page.getByRole('button', { name: 'Van 05 · Oil change and brake check' }).click()
+  const rec = page.getByRole('dialog')
+  await expect(rec.getByText('Overdue', { exact: true })).toBeVisible()
+  await rec.getByRole('button', { name: 'Mark done' }).click()
+  // Completion needs an explicit confirmation.
+  await rec.getByRole('button', { name: 'Confirm done' }).click()
+  await expect(rec.getByText('Tick the box to confirm the van is ready for trips.')).toBeVisible()
+  await rec.getByLabel(/I confirm the work is finished/).check()
+  await rec.getByRole('button', { name: 'Confirm done' }).click()
   await expect(page.getByText(/Van 05 is past/)).toHaveCount(0)
-  await page.getByRole('tab', { name: /Done/ }).click()
-  await expect(page.getByText('Van 05 · Oil change and brake check')).toBeVisible()
+  await page.getByRole('button', { name: /^Completed/ }).click()
+  await expect(page.getByRole('button', { name: 'Van 05 · Oil change and brake check' })).toBeVisible()
 
   // Staff accounts: a deactivated account cannot log in.
   await adminNav(page, 'Staff accounts')

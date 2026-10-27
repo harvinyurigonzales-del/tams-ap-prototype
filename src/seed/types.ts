@@ -225,7 +225,7 @@ export interface Vehicle {
   /** Inactive vans keep their history but take no new trips. Missing means active. */
   active?: boolean
   condition?: VehicleCondition
-  photo?: string
+  photo?: ImageRef
 }
 
 /** Roadworthiness, separate from maintenance bookings and from manual unavailability. */
@@ -244,7 +244,7 @@ export interface Driver {
   base?: string
   /** Inactive drivers keep their trip history but cannot be assigned. Missing means active. */
   active?: boolean
-  photo?: string
+  photo?: ImageRef
 }
 
 export interface Assignment {

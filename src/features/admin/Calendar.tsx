@@ -1,3 +1,4 @@
+import { assignmentIssue } from '../../domain/fleet'
 import { CarFront, ChevronLeft, ChevronRight, Wrench } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -41,8 +42,8 @@ function events(d: Dataset): CalEvent[] {
     const t = targets.find((x) => x.kind === 'departure' && x.id === dep.id)
     out.push({
       key: dep.id, kind: 'departure', from: dep.startDate, to: dep.endDate, title: svc.name,
-      detail: `${use.confirmed + use.completed} confirmed, ${use.pending} pending of ${dep.capacity} seats${t?.assignment ? ` · ${resName(t.assignment)}` : ''}`,
-      target: t, needsVan: !!t && !t.assignment && dep.endDate >= DEMO_TODAY, link: `/admin/bookings?service=${svc.id}`,
+      detail: `${use.confirmed + use.completed} confirmed, ${use.pending} pending of ${dep.capacity} seats${t?.assignment ? ` · ${resName(t.assignment)}` : ''}${t?.assignment && assignmentIssue(d, t.assignment) ? ' · Needs reassignment' : ''}`,
+      target: t, needsVan: !!t && (!t.assignment || !!assignmentIssue(d, t.assignment)) && dep.endDate >= DEMO_TODAY, link: `/admin/bookings?service=${svc.id}`,
     })
   }
   for (const b of d.bookings) {
@@ -50,13 +51,13 @@ function events(d: Dataset): CalEvent[] {
     const t = targets.find((x) => x.kind === 'booking' && x.id === b.id)
     out.push({
       key: b.id, kind: 'rental', from: b.startDate, to: b.endDate, title: `Van rental · ${b.rental?.destination ?? ''}`,
-      detail: `${b.id} · ${b.contactName}, ${b.pax} pax · ${b.status}${t?.assignment ? ` · ${resName(t.assignment)}` : ''}`,
-      target: t, needsVan: !!t && !t.assignment && b.endDate >= DEMO_TODAY, link: `/admin/bookings?id=${b.id}`,
+      detail: `${b.id} · ${b.contactName}, ${b.pax} pax · ${b.status}${t?.assignment ? ` · ${resName(t.assignment)}` : ''}${t?.assignment && assignmentIssue(d, t.assignment) ? ' · Needs reassignment' : ''}`,
+      target: t, needsVan: !!t && (!t.assignment || !!assignmentIssue(d, t.assignment)) && b.endDate >= DEMO_TODAY, link: `/admin/bookings?id=${b.id}`,
     })
   }
   for (const v of d.vehicles)
     for (const blk of v.blocks)
-      out.push({ key: `${v.id}-${blk.from}`, kind: 'block', from: blk.from, to: blk.to, title: `${v.name} ${blk.kind === 'maintenance' ? 'maintenance' : 'unavailable'}`, detail: blk.note, link: '/admin/vehicles' })
+      out.push({ key: blk.id ?? `${v.id}-${blk.from}`, kind: 'block', from: blk.from, to: blk.to, title: `${v.name} ${blk.kind === 'maintenance' ? 'maintenance' : 'unavailable'}`, detail: blk.note, link: '/admin/vehicles' })
   return out.sort((a, b) => a.from.localeCompare(b.from))
 }
 
@@ -72,7 +73,7 @@ export function Calendar() {
   const [day, setDay] = useState(DEMO_TODAY)
   const [assign, setAssign] = useState<CalEvent['target'] | null>(null)
   const evs = events(data)
-  const needs = assignableTargets(data).filter((t) => !t.assignment)
+  const needs = assignableTargets(data).filter((t) => !t.assignment || assignmentIssue(data, t.assignment))
   const month = day.slice(0, 7)
   const first = `${month}-01`
   const [y, m] = month.split('-').map(Number)
@@ -200,9 +201,10 @@ export function Calendar() {
                       <p className="text-xs text-ink-2">
                         {shortRange(t.from, t.to)} · {t.pax} pax · {t.id}
                       </p>
+                      {t.assignment && <p className="text-xs font-semibold text-bad">Needs reassignment · {assignmentIssue(data, t.assignment)}</p>}
                     </div>
                     <Button size="sm" onClick={() => { setDay(t.from); setAssign(t) }}>
-                      Assign
+                      {t.assignment ? 'Reassign' : 'Assign'}
                     </Button>
                   </li>
                 ))}

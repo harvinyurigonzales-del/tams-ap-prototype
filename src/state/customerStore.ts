@@ -1,3 +1,4 @@
+import { assignmentIssue } from '../domain/fleet'
 import { create } from 'zustand'
 import { addDays, DEMO_TODAY, dateOf, daysBetween, demoNowStamp } from '../lib/demoClock'
 import { peso } from '../lib/format'
@@ -227,7 +228,7 @@ export function staffSteps(d: Dataset, b: Booking): StaffStep[] {
   if (b.status === 'Pending' && canConfirm(b, d.payments).ok) out.push('confirm')
   if (b.status === 'Confirmed') {
     const t = assignableTargets(d).find((x) => (b.departureId ? x.kind === 'departure' && x.id === b.departureId : x.kind === 'booking' && x.id === b.id))
-    if (t && !t.assignment) out.push('assign')
+    if (t && (!t.assignment || assignmentIssue(d, t.assignment))) out.push('assign')
     if (t?.assignment) out.push('remind')
     if (money(b, d.payments).balance === 0 && !b.cancellationRequested) out.push('complete')
   }
@@ -687,7 +688,8 @@ export const useCustomer = create<CustomerState>((set, get) => ({
         const v = data.vehicles.find((x) => !vehicleConflict(data, x, t))
         const dr = data.drivers.find((x) => !driverConflict(data, x, t))
         if (!v || !dr) return fail('No van and driver are free on these dates.')
-        data.assignments.push({ id: nextId(data, 'assignment'), target: { kind: t.kind, id: t.id }, from: t.from, to: t.to, vehicleId: v.id, driverId: dr.id, origin: 'local' })
+        if (t.assignment) Object.assign(data.assignments.find((a) => a.id === t.assignment!.id)!, { vehicleId: v.id, driverId: dr.id, origin: 'local' })
+        else data.assignments.push({ id: nextId(data, 'assignment'), target: { kind: t.kind, id: t.id }, from: t.from, to: t.to, vehicleId: v.id, driverId: dr.id, origin: 'local' })
         notify(data, b.customerId, { at, category: 'Travel', title: 'Van and driver assigned', body: `${title}: ${v.name} (${v.plate}) with ${dr.name}.`, link })
         break
       }

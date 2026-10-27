@@ -101,7 +101,8 @@ export function Bookings() {
           >
             {p.rows.map((b) => {
               const m = money(b, data.payments)
-              const next = staffSteps(data, b).map((st) => NEXT[st]).find(Boolean)
+              const assigned = data.assignments.some((a) => (b.departureId ? a.target.kind === 'departure' && a.target.id === b.departureId : a.target.kind === 'booking' && a.target.id === b.id))
+              const next = staffSteps(data, b).map((st) => (st === 'assign' && assigned ? 'Needs reassignment' : NEXT[st])).find(Boolean)
               return (
                 <tr
                   key={b.id}

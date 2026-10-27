@@ -55,7 +55,7 @@ export function AssignDialog({ target, onClose }: { target: (AssignTarget & { as
         <fieldset>
           <legend className="mb-2 text-xs font-semibold tracking-wide text-ink-3 uppercase">Van</legend>
           <div className="space-y-2">
-            {data.vehicles.map((v) => {
+            {data.vehicles.filter((v) => v.active !== false || v.id === van).map((v) => {
               const why = vehicleConflict(data, v, target)
               return (
                 <label
@@ -79,7 +79,7 @@ export function AssignDialog({ target, onClose }: { target: (AssignTarget & { as
         <fieldset>
           <legend className="mb-2 text-xs font-semibold tracking-wide text-ink-3 uppercase">Driver</legend>
           <div className="space-y-2">
-            {data.drivers.map((d) => {
+            {data.drivers.filter((d) => d.active !== false || d.id === driver).map((d) => {
               const why = driverConflict(data, d, target)
               return (
                 <label

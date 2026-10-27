@@ -6,7 +6,7 @@ import type { Dataset } from '../seed/types'
 // Saved data from earlier versions of the prototype is upgraded in place, step by step, so accounts, bookings and
 // customer progress survive an update. Each step only adds or fills in what that version introduced.
 
-export const DATA_VERSION = 3
+export const DATA_VERSION = 4
 
 interface Stored {
   v: number
@@ -29,6 +29,11 @@ export function normalize(d: Dataset) {
     s.status = packageStatus(s)
     s.inactive = s.status !== 'Active'
   }
+  // Van and driver blocks get ids so staff can edit or remove a single period.
+  for (const owner of [...d.vehicles, ...d.drivers]) {
+    let n = Math.max(0, ...owner.blocks.map((b) => Number(b.id?.split('-').pop()) || 0))
+    for (const b of owner.blocks) b.id ??= `${owner.id}-${++n}`
+  }
   // Bookings made before the agreed terms were stored keep the package as it was when this version first loaded.
   for (const b of d.bookings) b.agreed ??= agreedOf(d, b)
 }
@@ -38,6 +43,15 @@ const steps: Record<number, (s: Stored) => void> = {
   1: (s) => normalize(s.data),
   // v2 → v3: seasonal package examples.
   2: (s) => addSeasonal(s.data),
+  // v3 → v4: maintenance lifecycle (Scheduled, In Maintenance, Completed, Cancelled); "Done" becomes Completed.
+  3: (s) => {
+    for (const m of s.maintenance ?? []) {
+      if ((m.status as string) === 'Done') {
+        m.status = 'Completed'
+        m.completedOn ??= m.doneAt?.slice(0, 10)
+      }
+    }
+  },
 }
 
 /** Upgrades a saved copy to the current version, or returns null when it cannot be read. */

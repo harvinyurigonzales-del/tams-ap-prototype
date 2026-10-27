@@ -154,6 +154,8 @@ export const blockOverlaps = (b: Block, from: string, to: string) => overlaps(b.
 
 /** Why a van cannot take this trip, or null when it can. */
 export function vehicleConflict(d: Dataset, v: Vehicle, t: AssignTarget): string | null {
+  if (v.active === false) return 'Inactive, takes no new trips'
+  if (v.condition === 'Not roadworthy') return 'Not roadworthy'
   if (v.seats < t.pax) return `Only ${v.seats} seats for ${t.pax} passengers`
   for (const blk of v.blocks) {
     if (blockOverlaps(blk, t.from, t.to)) {
@@ -170,6 +172,7 @@ export function vehicleConflict(d: Dataset, v: Vehicle, t: AssignTarget): string
 
 /** Why a driver cannot take this trip, or null when they can. */
 export function driverConflict(d: Dataset, dr: Driver, t: AssignTarget): string | null {
+  if (dr.active === false) return 'Inactive, takes no new trips'
   for (const blk of dr.blocks) {
     if (overlaps(blk.from, blk.to, t.from, t.to)) return `${blk.note} ${shortRange(blk.from, blk.to)}`
   }
@@ -181,6 +184,7 @@ export function driverConflict(d: Dataset, dr: Driver, t: AssignTarget): string 
 
 /** Current status of a van on a given day, for the fleet lists. */
 export function vehicleStatusOn(d: Dataset, v: Vehicle, day = DEMO_TODAY) {
+  if (v.active === false) return 'Inactive'
   const blk = v.blocks.find((b) => blockOverlaps(b, day, day))
   if (blk) return blk.kind === 'maintenance' ? 'Maintenance' : 'Unavailable'
   return d.assignments.some((a) => a.vehicleId === v.id && overlaps(a.from, a.to, day, day)) ? 'On a trip' : 'Available'

@@ -19,10 +19,22 @@ export interface MaintenanceRecord {
   from: string
   to: string
   note: string
-  status: 'Scheduled' | 'Done'
+  status: MaintenanceStatus
+  /** Workshop or person doing the work. */
+  provider?: string
+  /** Estimated cost while open; the actual cost once completed. */
+  cost?: number
+  startedAt?: string
+  /** When staff confirmed the work was finished, and the day it actually finished. */
   doneAt?: string
+  completedOn?: string
   doneNote?: string
+  cancelledAt?: string
+  cancelReason?: string
 }
+
+/** Overdue is not a status: it is worked out from the dates (domain/fleet.ts). */
+export type MaintenanceStatus = 'Scheduled' | 'In Maintenance' | 'Completed' | 'Cancelled'
 
 const VAN_EXTRAS: Record<string, Pick<Vehicle, 'color' | 'odometer'>> = {
   'VAN-01': { color: 'White', odometer: 38450 }, 'VAN-02': { color: 'Silver', odometer: 52120 }, 'VAN-03': { color: 'Black', odometer: 29870 },
@@ -111,9 +123,9 @@ export function sharedSeed(): { data: Dataset; maintenance: MaintenanceRecord[] 
   data.drivers.forEach((x) => Object.assign(x, DRIVER_EXTRAS[x.id]))
 
   const maintenance: MaintenanceRecord[] = []
-  const add = (vehicleId: string, type: string, from: string, to: string, note: string, done?: string) => {
+  const add = (vehicleId: string, type: string, from: string, to: string, note: string, done?: string, extra: Partial<MaintenanceRecord> = {}) => {
     const id = `MNT-${String(maintenance.length + 1).padStart(2, '0')}`
-    maintenance.push({ id, vehicleId, type, from, to, note, status: done ? 'Done' : 'Scheduled', ...(done ? { doneAt: done, doneNote: 'Completed as scheduled.' } : {}) })
+    maintenance.push({ id, vehicleId, type, from, to, note, status: done ? 'Completed' : 'Scheduled', ...(done ? { doneAt: done, completedOn: done.slice(0, 10), doneNote: 'Completed as scheduled.' } : {}), ...extra })
     const v = data.vehicles.find((x) => x.id === vehicleId)!
     if (!done) {
       const existing = v.blocks.find((b) => b.kind === 'maintenance' && b.from === from)
@@ -121,10 +133,10 @@ export function sharedSeed(): { data: Dataset; maintenance: MaintenanceRecord[] 
       else v.blocks.push({ from, to, kind: 'maintenance', note: type, ref: id, untilDone: true })
     }
   }
-  add('VAN-04', 'Preventive maintenance (60,000 km)', addDays(DEMO_TODAY, -30), addDays(DEMO_TODAY, -29), 'Oil, filters and brake pads.', `${addDays(DEMO_TODAY, -29)}T16:00:00+08:00`)
+  add('VAN-04', 'Preventive maintenance (60,000 km)', addDays(DEMO_TODAY, -30), addDays(DEMO_TODAY, -29), 'Oil, filters and brake pads.', `${addDays(DEMO_TODAY, -29)}T16:00:00+08:00`, { provider: 'Toyota Malolos service center', cost: 8450 })
   const van3 = data.vehicles.find((v) => v.id === 'VAN-03')!.blocks.find((b) => b.kind === 'maintenance')
-  if (van3) add('VAN-03', 'Scheduled maintenance', van3.from, van3.to, 'Aircon cleaning and tire rotation.')
-  add('VAN-05', 'Oil change and brake check', addDays(DEMO_TODAY, -3), addDays(DEMO_TODAY, -2), 'Due at 75,000 km.')
+  if (van3) add('VAN-03', 'Scheduled maintenance', van3.from, van3.to, 'Aircon cleaning and tire rotation.', undefined, { status: 'In Maintenance', startedAt: `${van3.from}T08:00:00+08:00`, provider: 'Hyundai Calumpit', cost: 6200 })
+  add('VAN-05', 'Oil change and brake check', addDays(DEMO_TODAY, -3), addDays(DEMO_TODAY, -2), 'Due at 75,000 km.', undefined, { provider: 'Malolos Auto Care', cost: 3800 })
   add('VAN-02', 'Tire rotation and alignment', addDays(DEMO_TODAY, 18), addDays(DEMO_TODAY, 18), '')
   add('VAN-01', 'Preventive maintenance (40,000 km)', addDays(DEMO_TODAY, 37), addDays(DEMO_TODAY, 38), 'Book the casa service bay.')
   add('VAN-14', 'Timing belt replacement', addDays(DEMO_TODAY, 9), addDays(DEMO_TODAY, 10), 'Due at 70,000 km.')

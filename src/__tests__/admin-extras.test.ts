@@ -34,7 +34,7 @@ describe('maintenance', () => {
     const t = { kind: 'booking' as const, id: 'X', from: DEMO_TODAY, to: DEMO_TODAY, pax: 4, label: 'X' }
     expect(vehicleConflict(admin().data, van(), t)).toMatch(/overdue/)
     const m = admin().maintenance.find((x) => x.vehicleId === 'VAN-05' && x.status === 'Scheduled')!
-    expect(admin().completeMaintenance(m.id, '').ok).toBe(true)
+    expect(admin().completeMaintenance(m.id, { note: '' }).ok).toBe(true)
     expect(vehicleStatusOn(admin().data, van())).toBe('Available')
     expect(vehicleConflict(admin().data, van(), t)).toBeNull()
   })
@@ -43,7 +43,7 @@ describe('maintenance', () => {
     const r = admin().scheduleMaintenance({ vehicleId: 'VAN-01', type: 'Oil change', from: addDays(DEMO_TODAY, 9), to: addDays(DEMO_TODAY, 9), note: '' })
     expect(r.ok).toBe(false)
     const future = admin().maintenance.find((x) => x.vehicleId === 'VAN-02')!
-    expect(admin().completeMaintenance(future.id, '').ok).toBe(false)
+    expect(admin().completeMaintenance(future.id, { note: '' }).ok).toBe(false)
   })
 })
 

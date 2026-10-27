@@ -1,3 +1,4 @@
+import { assignmentIssue } from '../../domain/fleet'
 import { demoReceiptSrc } from '../../lib/receipt'
 import { CarFront, X } from 'lucide-react'
 import { useState } from 'react'
@@ -185,6 +186,9 @@ export function BookingPanel({ bookingId, onClose }: { bookingId: string; onClos
                 </p>
               ) : (
                 <p className="text-sm text-ink-2">{target ? 'Not assigned yet.' : 'Assign after the booking is confirmed.'}</p>
+              )}
+              {asg && assignmentIssue(data, asg) && (
+                <p className="mt-1 rounded-lg bg-bad-bg px-2.5 py-1.5 text-xs font-semibold text-bad">Needs reassignment · {assignmentIssue(data, asg)}</p>
               )}
               {b.departureId && asg && <p className="text-xs text-ink-3">Shared by everyone on this departure.</p>}
             </section>

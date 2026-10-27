@@ -1,6 +1,6 @@
 import { create } from 'zustand'
-import { addDays, addHours, DEMO_TODAY, demoNowStamp, isoMs } from '../lib/demoClock'
-import { fmtExact, peso } from '../lib/format'
+import { addDays, addHours, DEMO_TODAY, demoNowStamp, isoMs, overlaps } from '../lib/demoClock'
+import { fmtDate, fmtExact, peso } from '../lib/format'
 import { canTransition, draftCustomProposal, PROPOSAL_VALID_DAYS, requestDestination } from '../domain/requests'
 import { assignableTargets, canCancel, canConfirm, driverConflict, money, shortRange, vehicleConflict } from '../domain/rules'
 import type { MaintenanceRecord } from '../seed/derive'
@@ -9,6 +9,7 @@ import { changesOf, logActivity } from '../domain/activity'
 import { packageStatus, priceBasisOf, setStatus } from '../domain/packages'
 import { departureAvailability } from '../domain/rules'
 import { deadlinesOf, openRefund, policyNow } from '../domain/paymentPolicy'
+import { affectedTrips, isMaintenanceOverdue, isOpenMaintenance, maintenanceConflicts, nextFreeNote } from '../domain/fleet'
 import { nextId } from './ids'
 import { freshState, markSignedOut, readSession, startingState, writeSession } from './persist'
 
@@ -48,8 +49,15 @@ export interface BusinessSettings {
 }
 
 export type StaffInput = Pick<StaffAccount, 'name' | 'email' | 'role' | 'title' | 'mobile'> & { password?: string }
-export type VehicleInput = Pick<Vehicle, 'name' | 'model' | 'plate' | 'seats' | 'categoryId'> & Pick<Vehicle, 'color' | 'odometer'>
-export type DriverInput = Pick<Driver, 'name' | 'mobile' | 'license' | 'licenseExpiry' | 'since'>
+export type VehicleInput = Pick<Vehicle, 'name' | 'model' | 'plate' | 'seats' | 'categoryId'> & Pick<Vehicle, 'color' | 'odometer' | 'condition' | 'photo'>
+export type DriverInput = Pick<Driver, 'name' | 'mobile' | 'license' | 'licenseExpiry' | 'since' | 'email' | 'base' | 'photo'>
+/** A period a van or driver cannot take trips. Missing id adds a new period. */
+export interface PeriodInput {
+  id?: string
+  from: string
+  to: string
+  note: string
+}
 export type PackageInput = Pick<Service, 'name' | 'destinationId' | 'duration' | 'days' | 'price' | 'pickup' | 'pickupTime' | 'summary' | 'itinerary' | 'inclusions' | 'exclusions'> &
   Partial<Pick<Service, 'priceBasis' | 'capacity' | 'season' | 'image' | 'description'>> & {
     /** The full departure schedule after the edit; leave out to keep departures as they are. */
@@ -65,7 +73,7 @@ export interface DepartureInput {
   startDate: string
   capacity: number
 }
-export type MaintenanceInput = Pick<MaintenanceRecord, 'vehicleId' | 'type' | 'from' | 'to' | 'note'>
+export type MaintenanceInput = Pick<MaintenanceRecord, 'vehicleId' | 'type' | 'from' | 'to' | 'note' | 'provider' | 'cost'>
 
 interface AdminState {
   data: Dataset
@@ -86,13 +94,25 @@ interface AdminState {
   setStaffActive: (id: string, active: boolean) => Result
   deleteStaff: (id: string) => Result
   saveVehicle: (id: string | null, input: VehicleInput) => Result
+  /** Inactive vans keep their history and take no new trips; upcoming trips on them show "Needs reassignment". */
+  setVehicleActive: (id: string, active: boolean, reason: string) => Result
+  /** Only a van with no trips or maintenance on record can be deleted. */
   deleteVehicle: (id: string) => Result
+  saveVehicleBlock: (vehicleId: string, input: PeriodInput) => Result
+  removeVehicleBlock: (vehicleId: string, blockId: string) => Result
   saveDriver: (id: string | null, input: DriverInput) => Result
+  setDriverActive: (id: string, active: boolean, reason: string) => Result
   deleteDriver: (id: string) => Result
+  saveDriverBlock: (driverId: string, input: PeriodInput) => Result
+  removeDriverBlock: (driverId: string, blockId: string) => Result
   scheduleMaintenance: (input: MaintenanceInput) => Result
+  /** Edits open maintenance: details, van and dates while scheduled; details and end date once started. */
+  updateMaintenance: (id: string, input: MaintenanceInput) => Result
   rescheduleMaintenance: (id: string, from: string, to: string) => Result
-  completeMaintenance: (id: string, note: string) => Result
-  cancelMaintenance: (id: string) => Result
+  startMaintenance: (id: string) => Result
+  /** Closes the work after the admin confirms it; the van's availability is worked out again. */
+  completeMaintenance: (id: string, input: { completedOn?: string; cost?: number; note: string }) => Result
+  cancelMaintenance: (id: string, reason: string) => Result
   savePackage: (id: string | null, input: PackageInput) => Result
   setPackageActive: (id: string, active: boolean) => Result
   setPackageStatus: (id: string, status: PackageStatus) => Result
@@ -561,21 +581,61 @@ export const useAdmin = create<AdminState>((set, get) => ({
   saveVehicle: (id, x) => {
     const s = get()
     if (!isAdmin(s)) return fail(ADMIN_ONLY)
+    const before = id ? s.data.vehicles.find((v) => v.id === id) : undefined
+    if (id && !before) return fail('Van not found.')
     if (x.name.trim().length < 2) return fail('Enter the van’s name, for example Van 07.')
     if (x.model.trim().length < 3) return fail('Enter the make, model and year.')
     if (!/^[A-Z]{3}\s?\d{3,4}$/i.test(x.plate.trim())) return fail('Enter the plate number, for example TMS 1007.')
     if (s.data.vehicles.some((v) => v.id !== id && v.plate.replace(/\s/g, '').toUpperCase() === x.plate.replace(/\s/g, '').toUpperCase())) return fail('Another van already has this plate number.')
     if (!Number.isInteger(x.seats) || x.seats < 4 || x.seats > 18) return fail('Seats must be between 4 and 18.')
+    if (id) {
+      // A van cannot shrink below the group it is already booked to carry.
+      const targets = assignableTargets(s.data)
+      const biggest = s.data.assignments
+        .filter((a) => a.vehicleId === id && a.to >= DEMO_TODAY)
+        .map((a) => targets.find((t) => t.kind === a.target.kind && t.id === a.target.id))
+        .reduce((n, t) => Math.max(n, t?.pax ?? 0), 0)
+      if (x.seats < biggest) return fail(`This van is assigned to a trip with ${biggest} passengers. Keep at least ${biggest} seats, or reassign that trip first.`)
+    }
     const data = structuredClone(s.data)
-    const clean = { ...x, name: x.name.trim(), model: x.model.trim(), plate: x.plate.trim().toUpperCase(), color: x.color?.trim() }
+    const clean = { ...x, name: x.name.trim(), model: x.model.trim(), plate: x.plate.trim().toUpperCase(), color: x.color?.trim(), condition: x.condition ?? 'Good' }
     let vid = id
     if (id) Object.assign(data.vehicles.find((v) => v.id === id)!, clean)
     else {
       const n = Math.max(0, ...data.vehicles.map((v) => Number(v.id.slice(4)))) + 1
       vid = `VAN-${String(n).padStart(2, '0')}`
-      data.vehicles.push({ id: vid, ...clean, blocks: [] })
+      data.vehicles.push({ id: vid, ...clean, active: true, blocks: [] })
     }
-    activity(data, demoNowStamp(), { category: 'Fleet', title: id ? 'Van details updated' : 'Van added', body: `${clean.name} · ${clean.plate}.`, link: `/admin/vehicles?id=${vid}` })
+    const at = demoNowStamp()
+    const after = data.vehicles.find((v) => v.id === vid)!
+    const changes = before ? changesOf({ ...before, condition: before.condition ?? 'Good' }, after, VAN_FIELDS, { photo: (v) => (v ? 'Custom photo' : 'Type photo'), categoryId: (v) => s.data.vehicleCategories.find((c) => c.id === v)?.name ?? '—' }) : []
+    if (before && changes.length === 0) return { ok: true, id: vid! }
+    logActivity(data, at, {
+      actor: actorOf(s), module: 'Vans', recordId: vid!, recordLabel: clean.name, action: before ? 'Edited' : 'Added',
+      description: before ? `Changed ${changes.map((c) => c.field.toLowerCase()).join(', ')}.` : `${clean.plate}, ${clean.seats} seats.`, changes: changes.length ? changes : undefined,
+    })
+    activity(data, at, { category: 'Fleet', title: id ? 'Van details updated' : 'Van added', body: `${clean.name} · ${clean.plate}.`, link: `/admin/vehicles?id=${vid}` })
+    set({ data })
+    return { ok: true, id: vid! }
+  },
+
+  setVehicleActive: (id, active, reason) => {
+    const s = get()
+    if (!isAdmin(s)) return fail(ADMIN_ONLY)
+    const data = structuredClone(s.data)
+    const v = data.vehicles.find((x) => x.id === id)
+    if (!v) return fail('Van not found.')
+    if (!active && !reason.trim()) return fail('Say why the van is being deactivated.')
+    if ((v.active !== false) === active) return OK
+    v.active = active
+    const at = demoNowStamp()
+    const trips = active ? [] : affectedTrips(data, { vehicleId: id }, DEMO_TODAY, '9999-12-31')
+    logActivity(data, at, {
+      actor: actorOf(s), module: 'Vans', recordId: id, recordLabel: v.name, action: active ? 'Reactivated' : 'Deactivated',
+      description: active ? 'Can take trips again.' : `${reason.trim()}.${trips.length ? ` ${trips.length} upcoming ${trips.length === 1 ? 'trip needs' : 'trips need'} reassignment.` : ''}`,
+      changes: [{ field: 'Active', from: active ? 'No' : 'Yes', to: active ? 'Yes' : 'No' }],
+    })
+    activity(data, at, { category: 'Fleet', title: active ? 'Van reactivated' : 'Van deactivated', body: `${v.name} · ${v.plate}.${trips.length ? ` ${trips.length} trips need reassignment.` : ''}`, link: `/admin/vehicles?id=${id}` })
     set({ data })
     return OK
   },
@@ -584,34 +644,111 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const s = get()
     if (!isAdmin(s)) return fail(ADMIN_ONLY)
     const upcoming = s.data.assignments.filter((a) => a.vehicleId === id && a.to >= DEMO_TODAY)
-    if (upcoming.length) return fail(`This van has ${upcoming.length} upcoming ${upcoming.length === 1 ? 'trip' : 'trips'}. Reassign ${upcoming.length === 1 ? 'it' : 'them'} first.`)
+    if (upcoming.length) return fail(`This van has ${upcoming.length} upcoming ${upcoming.length === 1 ? 'trip' : 'trips'}. Reassign ${upcoming.length === 1 ? 'it' : 'them'} first, or deactivate the van.`)
+    if (s.data.assignments.some((a) => a.vehicleId === id) || s.maintenance.some((m) => m.vehicleId === id)) return fail('This van has trip or maintenance history. Deactivate it instead, so the history stays.')
     const data = structuredClone(s.data)
     const v = data.vehicles.find((x) => x.id === id)
     if (!v) return fail('Van not found.')
     data.vehicles = data.vehicles.filter((x) => x.id !== id)
-    activity(data, demoNowStamp(), { category: 'Fleet', title: 'Van removed', body: `${v.name} · ${v.plate}.`, link: '/admin/vehicles' })
-    set({ data, maintenance: s.maintenance.filter((m) => m.vehicleId !== id) })
+    const at = demoNowStamp()
+    logActivity(data, at, { actor: actorOf(s), module: 'Vans', recordId: id, recordLabel: v.name, action: 'Deleted', description: `${v.plate} removed. It had no trips or maintenance.` })
+    activity(data, at, { category: 'Fleet', title: 'Van removed', body: `${v.name} · ${v.plate}.`, link: '/admin/vehicles' })
+    set({ data })
+    return OK
+  },
+
+  saveVehicleBlock: (vehicleId, x) => {
+    const s = get()
+    if (!isAdmin(s)) return fail(ADMIN_ONLY)
+    const err = periodError(x)
+    if (err) return fail(err)
+    const v0 = s.data.vehicles.find((v) => v.id === vehicleId)
+    if (!v0) return fail('Van not found.')
+    const work = s.maintenance.find((m) => m.vehicleId === vehicleId && isOpenMaintenance(m) && overlaps(m.from, isMaintenanceOverdue(m) ? DEMO_TODAY : m.to, x.from, x.to))
+    if (work) return fail(`${v0.name} is already in maintenance ${shortRange(work.from, work.to)} (${work.type}). Change the maintenance instead.`)
+    const clash = v0.blocks.find((b) => b.id !== x.id && b.kind !== 'maintenance' && overlaps(b.from, b.to, x.from, x.to))
+    if (clash) return fail(`${v0.name} is already marked unavailable ${shortRange(clash.from, clash.to)}. Edit that period instead.`)
+    const data = structuredClone(s.data)
+    const v = data.vehicles.find((y) => y.id === vehicleId)!
+    const result = upsertBlock(v, x, 'unavailable')
+    if (!result.ok) return result
+    const trips = affectedTrips(data, { vehicleId }, x.from, x.to)
+    const at = demoNowStamp()
+    logActivity(data, at, {
+      actor: actorOf(s), module: 'Vans', recordId: vehicleId, recordLabel: v.name, action: x.id ? 'Unavailability changed' : 'Marked unavailable',
+      description: `${x.note.trim()}, ${shortRange(x.from, x.to)}.${trips.length ? ` ${trips.length} assigned ${trips.length === 1 ? 'trip needs' : 'trips need'} reassignment.` : ''}`,
+      changes: result.before ? [{ field: 'Period', from: `${shortRange(result.before.from, result.before.to)} · ${result.before.note}`, to: `${shortRange(x.from, x.to)} · ${x.note.trim()}` }] : undefined,
+    })
+    set({ data })
+    return { ok: true, id: result.id }
+  },
+
+  removeVehicleBlock: (vehicleId, blockId) => {
+    const s = get()
+    if (!isAdmin(s)) return fail(ADMIN_ONLY)
+    const data = structuredClone(s.data)
+    const v = data.vehicles.find((y) => y.id === vehicleId)
+    const b = v?.blocks.find((y) => y.id === blockId)
+    if (!v || !b) return fail('This period was not found.')
+    if (b.kind === 'maintenance') return fail('Maintenance is changed from the Maintenance page.')
+    v.blocks = v.blocks.filter((y) => y.id !== blockId)
+    logActivity(data, demoNowStamp(), { actor: actorOf(s), module: 'Vans', recordId: vehicleId, recordLabel: v.name, action: 'Unavailability removed', description: `${b.note}, ${shortRange(b.from, b.to)}.` })
+    set({ data })
     return OK
   },
 
   saveDriver: (id, x) => {
     const s = get()
     if (!isAdmin(s)) return fail(ADMIN_ONLY)
+    const before = id ? s.data.drivers.find((d) => d.id === id) : undefined
+    if (id && !before) return fail('Driver not found.')
     if (x.name.trim().length < 2) return fail('Enter the driver’s name.')
     if (!mobileOk(x.mobile)) return fail('Use the format 09XX XXX XXXX for the mobile number.')
+    if (x.email?.trim() && !EMAIL.test(x.email.trim())) return fail('Enter a valid email address, or leave it blank.')
     if (!x.license || x.license.trim().length < 6) return fail('Enter the driver’s license number.')
+    if (s.data.drivers.some((d) => d.id !== id && d.license?.replace(/[\s-]/g, '').toUpperCase() === x.license!.replace(/[\s-]/g, '').toUpperCase())) return fail('Another driver already has this license number.')
     if (!x.licenseExpiry) return fail('Enter the license expiry date.')
     if (x.licenseExpiry < DEMO_TODAY) return fail('This license has expired. Drivers need a valid license.')
     const data = structuredClone(s.data)
-    const clean = { ...x, name: x.name.trim(), mobile: x.mobile.trim(), license: x.license.trim().toUpperCase() }
+    const clean = { ...x, name: x.name.trim(), mobile: x.mobile.trim(), license: x.license.trim().toUpperCase(), email: x.email?.trim() || undefined, base: x.base?.trim() || undefined }
     let did = id
     if (id) Object.assign(data.drivers.find((d) => d.id === id)!, clean)
     else {
       const n = Math.max(0, ...data.drivers.map((d) => Number(d.id.slice(4)))) + 1
       did = `DRV-${String(n).padStart(2, '0')}`
-      data.drivers.push({ id: did, ...clean, since: clean.since || DEMO_TODAY, blocks: [] })
+      data.drivers.push({ id: did, ...clean, since: clean.since || DEMO_TODAY, active: true, blocks: [] })
     }
-    activity(data, demoNowStamp(), { category: 'Fleet', title: id ? 'Driver details updated' : 'Driver added', body: clean.name, link: `/admin/drivers?id=${did}` })
+    const at = demoNowStamp()
+    const after = data.drivers.find((d) => d.id === did)!
+    const changes = before ? changesOf(before, after, DRIVER_FIELDS, { licenseExpiry: (v) => (v ? fmtDate(String(v)) : '—'), since: (v) => (v ? fmtDate(String(v)) : '—'), photo: (v) => (v ? 'Photo' : 'No photo') }) : []
+    if (before && changes.length === 0) return { ok: true, id: did! }
+    logActivity(data, at, {
+      actor: actorOf(s), module: 'Drivers', recordId: did!, recordLabel: clean.name, action: before ? 'Edited' : 'Added',
+      description: before ? `Changed ${changes.map((c) => c.field.toLowerCase()).join(', ')}.` : `License ${clean.license}, valid until ${fmtDate(clean.licenseExpiry!)}.`, changes: changes.length ? changes : undefined,
+    })
+    activity(data, at, { category: 'Fleet', title: id ? 'Driver details updated' : 'Driver added', body: clean.name, link: `/admin/drivers?id=${did}` })
+    set({ data })
+    return { ok: true, id: did! }
+  },
+
+  setDriverActive: (id, active, reason) => {
+    const s = get()
+    if (!isAdmin(s)) return fail(ADMIN_ONLY)
+    const data = structuredClone(s.data)
+    const d = data.drivers.find((x) => x.id === id)
+    if (!d) return fail('Driver not found.')
+    if (!active && !reason.trim()) return fail('Say why the driver is being deactivated.')
+    if ((d.active !== false) === active) return OK
+    if (active && d.licenseExpiry && d.licenseExpiry < DEMO_TODAY) return fail('The license on file has expired. Update it before reactivating the driver.')
+    d.active = active
+    const at = demoNowStamp()
+    const trips = active ? [] : affectedTrips(data, { driverId: id }, DEMO_TODAY, '9999-12-31')
+    logActivity(data, at, {
+      actor: actorOf(s), module: 'Drivers', recordId: id, recordLabel: d.name, action: active ? 'Reactivated' : 'Deactivated',
+      description: active ? 'Can be assigned to trips again.' : `${reason.trim()}.${trips.length ? ` ${trips.length} upcoming ${trips.length === 1 ? 'trip needs' : 'trips need'} reassignment.` : ''}`,
+      changes: [{ field: 'Active', from: active ? 'No' : 'Yes', to: active ? 'Yes' : 'No' }],
+    })
+    activity(data, at, { category: 'Fleet', title: active ? 'Driver reactivated' : 'Driver deactivated', body: `${d.name}.${trips.length ? ` ${trips.length} trips need reassignment.` : ''}`, link: `/admin/drivers?id=${id}` })
     set({ data })
     return OK
   },
@@ -620,12 +757,53 @@ export const useAdmin = create<AdminState>((set, get) => ({
     const s = get()
     if (!isAdmin(s)) return fail(ADMIN_ONLY)
     const upcoming = s.data.assignments.filter((a) => a.driverId === id && a.to >= DEMO_TODAY)
-    if (upcoming.length) return fail(`This driver has ${upcoming.length} upcoming ${upcoming.length === 1 ? 'trip' : 'trips'}. Reassign ${upcoming.length === 1 ? 'it' : 'them'} first.`)
+    if (upcoming.length) return fail(`This driver has ${upcoming.length} upcoming ${upcoming.length === 1 ? 'trip' : 'trips'}. Reassign ${upcoming.length === 1 ? 'it' : 'them'} first, or deactivate the driver.`)
+    if (s.data.assignments.some((a) => a.driverId === id)) return fail('This driver has trip history. Deactivate them instead, so the history stays.')
     const data = structuredClone(s.data)
     const d = data.drivers.find((x) => x.id === id)
     if (!d) return fail('Driver not found.')
     data.drivers = data.drivers.filter((x) => x.id !== id)
-    activity(data, demoNowStamp(), { category: 'Fleet', title: 'Driver removed', body: d.name, link: '/admin/drivers' })
+    const at = demoNowStamp()
+    logActivity(data, at, { actor: actorOf(s), module: 'Drivers', recordId: id, recordLabel: d.name, action: 'Deleted', description: 'Removed. The driver had no trips.' })
+    activity(data, at, { category: 'Fleet', title: 'Driver removed', body: d.name, link: '/admin/drivers' })
+    set({ data })
+    return OK
+  },
+
+  saveDriverBlock: (driverId, x) => {
+    const s = get()
+    if (!isAdmin(s)) return fail(ADMIN_ONLY)
+    const err = periodError(x)
+    if (err) return fail(err)
+    const d0 = s.data.drivers.find((d) => d.id === driverId)
+    if (!d0) return fail('Driver not found.')
+    const clash = d0.blocks.find((b) => b.id !== x.id && overlaps(b.from, b.to, x.from, x.to))
+    if (clash) return fail(`${d0.name} is already unavailable ${shortRange(clash.from, clash.to)} (${clash.note}). Edit that period instead.`)
+    const data = structuredClone(s.data)
+    const d = data.drivers.find((y) => y.id === driverId)!
+    const result = upsertBlock(d, x, 'leave')
+    if (!result.ok) return result
+    const trips = affectedTrips(data, { driverId }, x.from, x.to)
+    const at = demoNowStamp()
+    logActivity(data, at, {
+      actor: actorOf(s), module: 'Drivers', recordId: driverId, recordLabel: d.name, action: x.id ? 'Unavailability changed' : 'Marked unavailable',
+      description: `${x.note.trim()}, ${shortRange(x.from, x.to)}.${trips.length ? ` ${trips.length} assigned ${trips.length === 1 ? 'trip needs' : 'trips need'} reassignment.` : ''}`,
+      changes: result.before ? [{ field: 'Period', from: `${shortRange(result.before.from, result.before.to)} · ${result.before.note}`, to: `${shortRange(x.from, x.to)} · ${x.note.trim()}` }] : undefined,
+    })
+    if (trips.length) activity(data, at, { category: 'Fleet', title: 'Trips need reassignment', body: `${d.name} is unavailable ${shortRange(x.from, x.to)}: ${trips.map((a) => a.target.id).join(', ')}.`, link: '/admin/calendar' })
+    set({ data })
+    return { ok: true, id: result.id }
+  },
+
+  removeDriverBlock: (driverId, blockId) => {
+    const s = get()
+    if (!isAdmin(s)) return fail(ADMIN_ONLY)
+    const data = structuredClone(s.data)
+    const d = data.drivers.find((y) => y.id === driverId)
+    const b = d?.blocks.find((y) => y.id === blockId)
+    if (!d || !b) return fail('This period was not found.')
+    d.blocks = d.blocks.filter((y) => y.id !== blockId)
+    logActivity(data, demoNowStamp(), { actor: actorOf(s), module: 'Drivers', recordId: driverId, recordLabel: d.name, action: 'Unavailability removed', description: `${b.note}, ${shortRange(b.from, b.to)}.` })
     set({ data })
     return OK
   },
@@ -633,60 +811,102 @@ export const useAdmin = create<AdminState>((set, get) => ({
   scheduleMaintenance: (x) => {
     const s = get()
     if (!isAdmin(s)) return fail(ADMIN_ONLY)
-    if (x.type.trim().length < 3) return fail('Describe the maintenance, for example Oil change.')
-    const err = maintenanceDatesError(s.data, x.vehicleId, x.from, x.to)
+    const err = maintenanceInputError(x) ?? maintenanceDatesError(s.data, x.vehicleId, x.from, x.to, undefined, s.maintenance)
     if (err) return fail(err)
     const data = structuredClone(s.data)
     const v = data.vehicles.find((y) => y.id === x.vehicleId)!
     const n = Math.max(0, ...s.maintenance.map((m) => Number(m.id.slice(4)))) + 1
     const id = `MNT-${String(n).padStart(2, '0')}`
-    v.blocks.push({ from: x.from, to: x.to, kind: 'maintenance', note: x.type.trim(), ref: id, untilDone: true })
-    activity(data, demoNowStamp(), { category: 'Fleet', title: 'Maintenance scheduled', body: `${v.name} · ${x.type.trim()}, ${shortRange(x.from, x.to)}.`, link: '/admin/maintenance' })
-    set({ data, maintenance: [...s.maintenance, { id, ...x, type: x.type.trim(), note: x.note.trim(), status: 'Scheduled' }] })
-    return OK
+    const rec: MaintenanceRecord = { id, vehicleId: x.vehicleId, type: x.type.trim(), from: x.from, to: x.to, note: x.note.trim(), provider: x.provider?.trim() || undefined, cost: x.cost || undefined, status: 'Scheduled' }
+    v.blocks.push({ id: `${v.id}-${id}`, from: x.from, to: x.to, kind: 'maintenance', note: rec.type, ref: id, untilDone: true })
+    const at = demoNowStamp()
+    logActivity(data, at, { actor: actorOf(s), module: 'Maintenance', recordId: id, recordLabel: `${v.name} · ${rec.type}`, action: 'Scheduled', description: `${shortRange(x.from, x.to)}${rec.provider ? ` at ${rec.provider}` : ''}.` })
+    activity(data, at, { category: 'Fleet', title: 'Maintenance scheduled', body: `${v.name} · ${rec.type}, ${shortRange(x.from, x.to)}.`, link: '/admin/maintenance' })
+    set({ data, maintenance: [...s.maintenance, rec] })
+    return { ok: true, id }
+  },
+
+  updateMaintenance: (id, x) => {
+    const s = get()
+    if (!isAdmin(s)) return fail(ADMIN_ONLY)
+    const m = s.maintenance.find((y) => y.id === id)
+    if (!m || !isOpenMaintenance(m)) return fail('Only open maintenance can be changed.')
+    if (m.status === 'In Maintenance' && (x.vehicleId !== m.vehicleId || x.from !== m.from)) return fail('Work has started, so only the end date and details can change.')
+    const err = maintenanceInputError(x) ?? maintenanceDatesError(s.data, x.vehicleId, x.from, x.to, id, s.maintenance, m.status === 'In Maintenance')
+    if (err) return fail(err)
+    const data = structuredClone(s.data)
+    for (const v of data.vehicles) v.blocks = v.blocks.filter((b) => b.ref !== id)
+    const v = data.vehicles.find((y) => y.id === x.vehicleId)!
+    v.blocks.push({ id: `${v.id}-${id}`, from: x.from, to: x.to, kind: 'maintenance', note: x.type.trim(), ref: id, untilDone: true })
+    const after: MaintenanceRecord = { ...m, vehicleId: x.vehicleId, type: x.type.trim(), from: x.from, to: x.to, note: x.note.trim(), provider: x.provider?.trim() || undefined, cost: x.cost || undefined }
+    const vanName = (vid: unknown) => s.data.vehicles.find((y) => y.id === vid)?.name ?? String(vid)
+    const changes = changesOf(m, after, MAINTENANCE_FIELDS, { vehicleId: vanName, from: (d) => fmtDate(String(d)), to: (d) => fmtDate(String(d)), cost: (c) => (c ? peso(Number(c)) : '—') })
+    if (changes.length === 0) return { ok: true, id }
+    const at = demoNowStamp()
+    const moved = changes.some((c) => c.field === 'Start' || c.field === 'End' || c.field === 'Van')
+    logActivity(data, at, { actor: actorOf(s), module: 'Maintenance', recordId: id, recordLabel: `${v.name} · ${after.type}`, action: moved ? 'Rescheduled' : 'Edited', description: moved ? `Now ${shortRange(x.from, x.to)}.` : `Changed ${changes.map((c) => c.field.toLowerCase()).join(', ')}.`, changes })
+    if (moved) activity(data, at, { category: 'Fleet', title: 'Maintenance rescheduled', body: `${v.name} · ${after.type}, now ${shortRange(x.from, x.to)}.`, link: '/admin/maintenance' })
+    set({ data, maintenance: s.maintenance.map((y) => (y.id === id ? after : y)) })
+    return { ok: true, id }
   },
 
   rescheduleMaintenance: (id, from, to) => {
+    const m = get().maintenance.find((y) => y.id === id)
+    if (!m) return fail('Maintenance not found.')
+    return get().updateMaintenance(id, { vehicleId: m.vehicleId, type: m.type, note: m.note, provider: m.provider, cost: m.cost, from, to })
+  },
+
+  startMaintenance: (id) => {
     const s = get()
     if (!isAdmin(s)) return fail(ADMIN_ONLY)
     const m = s.maintenance.find((y) => y.id === id)
-    if (!m || m.status !== 'Scheduled') return fail('Only scheduled maintenance can be moved.')
-    const err = maintenanceDatesError(s.data, m.vehicleId, from, to, id)
-    if (err) return fail(err)
+    if (!m || m.status !== 'Scheduled') return fail('Only scheduled maintenance can be started.')
+    if (m.from > DEMO_TODAY) return fail(`This work is planned from ${fmtDate(m.from)}. Reschedule it to start today.`)
     const data = structuredClone(s.data)
     const v = data.vehicles.find((y) => y.id === m.vehicleId)!
-    const blk = v.blocks.find((b) => b.ref === id)
-    if (blk) Object.assign(blk, { from, to })
-    activity(data, demoNowStamp(), { category: 'Fleet', title: 'Maintenance rescheduled', body: `${v.name} · ${m.type}, now ${shortRange(from, to)}.`, link: '/admin/maintenance' })
-    set({ data, maintenance: s.maintenance.map((y) => (y.id === id ? { ...y, from, to } : y)) })
+    const at = demoNowStamp()
+    logActivity(data, at, { actor: actorOf(s), module: 'Maintenance', recordId: id, recordLabel: `${v.name} · ${m.type}`, action: 'Started', description: `${v.name} is in the shop.`, changes: [{ field: 'Status', from: 'Scheduled', to: 'In Maintenance' }] })
+    set({ data, maintenance: s.maintenance.map((y) => (y.id === id ? { ...y, status: 'In Maintenance', startedAt: at } : y)) })
     return OK
   },
 
-  completeMaintenance: (id, note) => {
+  completeMaintenance: (id, x) => {
     const s = get()
     if (!isAdmin(s)) return fail(ADMIN_ONLY)
     const m = s.maintenance.find((y) => y.id === id)
-    if (!m || m.status !== 'Scheduled') return fail('This maintenance is already closed.')
+    if (!m || !isOpenMaintenance(m)) return fail('This maintenance is already closed.')
     if (m.from > DEMO_TODAY) return fail('This maintenance has not started yet. Reschedule it if the work was done early.')
+    const on = x.completedOn || DEMO_TODAY
+    if (on < m.from) return fail(`The work cannot finish before it started (${fmtDate(m.from)}).`)
+    if (on > DEMO_TODAY) return fail('The completion date cannot be in the future.')
+    if (x.cost !== undefined && (x.cost < 0 || !Number.isFinite(x.cost))) return fail('Enter the cost in pesos, or leave it blank.')
     const data = structuredClone(s.data)
     const v = data.vehicles.find((y) => y.id === m.vehicleId)!
     v.blocks = v.blocks.filter((b) => b.ref !== id)
     const at = demoNowStamp()
-    activity(data, at, { category: 'Fleet', title: 'Maintenance done', body: `${v.name} · ${m.type}. The van is back in service.`, link: '/admin/maintenance' })
-    set({ data, maintenance: s.maintenance.map((y) => (y.id === id ? { ...y, status: 'Done', doneAt: at, doneNote: note.trim() || 'Completed.' } : y)) })
+    const free = nextFreeNote(data, v)
+    logActivity(data, at, {
+      actor: actorOf(s), module: 'Maintenance', recordId: id, recordLabel: `${v.name} · ${m.type}`, action: 'Completed', description: `Finished ${fmtDate(on)}. ${free}`,
+      changes: [{ field: 'Status', from: m.status, to: 'Completed' }, ...(x.cost !== undefined && x.cost !== m.cost ? [{ field: 'Cost', from: m.cost ? peso(m.cost) : '—', to: x.cost ? peso(x.cost) : '—' }] : [])],
+    })
+    activity(data, at, { category: 'Fleet', title: 'Maintenance completed', body: `${v.name} · ${m.type}. ${free}`, link: '/admin/maintenance' })
+    set({ data, maintenance: s.maintenance.map((y) => (y.id === id ? { ...y, status: 'Completed', startedAt: y.startedAt ?? at, doneAt: at, completedOn: on, cost: x.cost ?? y.cost, doneNote: x.note.trim() || 'Completed.' } : y)) })
     return OK
   },
 
-  cancelMaintenance: (id) => {
+  cancelMaintenance: (id, reason) => {
     const s = get()
     if (!isAdmin(s)) return fail(ADMIN_ONLY)
     const m = s.maintenance.find((y) => y.id === id)
-    if (!m || m.status !== 'Scheduled') return fail('Only scheduled maintenance can be cancelled.')
+    if (!m || !isOpenMaintenance(m)) return fail('Only open maintenance can be cancelled.')
+    if (reason.trim().length < 3) return fail('Give a reason for cancelling.')
     const data = structuredClone(s.data)
     const v = data.vehicles.find((y) => y.id === m.vehicleId)!
     v.blocks = v.blocks.filter((b) => b.ref !== id)
-    activity(data, demoNowStamp(), { category: 'Fleet', title: 'Maintenance cancelled', body: `${v.name} · ${m.type}.`, link: '/admin/maintenance' })
-    set({ data, maintenance: s.maintenance.filter((y) => y.id !== id) })
+    const at = demoNowStamp()
+    logActivity(data, at, { actor: actorOf(s), module: 'Maintenance', recordId: id, recordLabel: `${v.name} · ${m.type}`, action: 'Cancelled', description: `${reason.trim()}. ${nextFreeNote(data, v)}`, changes: [{ field: 'Status', from: m.status, to: 'Cancelled' }] })
+    activity(data, at, { category: 'Fleet', title: 'Maintenance cancelled', body: `${v.name} · ${m.type}: ${reason.trim()}.`, link: '/admin/maintenance' })
+    set({ data, maintenance: s.maintenance.map((y) => (y.id === id ? { ...y, status: 'Cancelled', cancelledAt: at, cancelReason: reason.trim() } : y)) })
     return OK
   },
 
@@ -922,18 +1142,50 @@ export const actorOf = (s: { accounts: StaffAccount[]; userId: string | null }) 
 /** Flexible or undecided dates need firm dates from staff before a proposal goes out. */
 export const needsDates = (r: CustomRequest) => !!r.plan?.datesTbd || r.flexibility === 'Flexible dates' || r.flexibility === 'Dates to be decided'
 
-export function maintenanceDatesError(d: Dataset, vehicleId: string, from: string, to: string, ignore?: string): string | null {
+export function maintenanceDatesError(d: Dataset, vehicleId: string, from: string, to: string, ignore?: string, maintenance: MaintenanceRecord[] = [], started = false): string | null {
   const v = d.vehicles.find((x) => x.id === vehicleId)
   if (!v) return 'Choose a van.'
   if (!from || !to) return 'Choose the start and end dates.'
   if (to < from) return 'The end date must be on or after the start date.'
-  if (from < DEMO_TODAY) return 'Maintenance can only be scheduled from today onwards.'
-  const trip = d.assignments.find((a) => a.vehicleId === vehicleId && a.from <= to && a.to >= from)
-  if (trip) return `${v.name} is assigned to ${trip.target.id} on ${shortRange(trip.from, trip.to)}. Reassign the trip or pick other dates.`
-  const other = v.blocks.find((b) => b.ref !== ignore && b.from <= to && b.to >= from)
-  if (other) return `${v.name} is already out of service ${shortRange(other.from, other.to)} (${other.note}).`
+  if (!started && from < DEMO_TODAY) return 'Maintenance can only be scheduled from today onwards.'
+  if (started && to < DEMO_TODAY) return 'Work in progress needs an end date from today onwards.'
+  const clash = maintenanceConflicts(d, maintenance, vehicleId, started ? DEMO_TODAY > from ? DEMO_TODAY : from : from, to, ignore)[0]
+  if (!clash) return null
+  return clash.kind === 'trip' ? `${v.name} is ${clash.text[0].toLowerCase()}${clash.text.slice(1)}. Reassign the trip or pick other dates.` : clash.kind === 'maintenance' ? `${v.name} already has maintenance then: ${clash.text}.` : `${v.name} is already ${clash.text[0].toLowerCase()}${clash.text.slice(1)}.`
+}
+
+function maintenanceInputError(x: MaintenanceInput) {
+  if (x.type.trim().length < 3) return 'Describe the maintenance, for example Oil change.'
+  if (x.cost !== undefined && x.cost !== null && (x.cost < 0 || !Number.isFinite(x.cost))) return 'Enter the cost in pesos, or leave it blank.'
   return null
 }
+
+function periodError(x: PeriodInput) {
+  if (!x.from || !x.to) return 'Choose the start and end dates.'
+  if (x.to < x.from) return 'The end date must be on or after the start date.'
+  if (x.to < DEMO_TODAY) return 'Choose a period that ends today or later.'
+  if (x.note.trim().length < 3) return 'Give a reason, for example Leave or Under repair.'
+  return null
+}
+
+/** Adds or replaces one unavailable period on a van or driver. */
+function upsertBlock(owner: Vehicle | Driver, x: PeriodInput, kind: 'unavailable' | 'leave'): { ok: true; id: string; before?: { from: string; to: string; note: string } } | { ok: false; error: string } {
+  if (x.id) {
+    const b = owner.blocks.find((y) => y.id === x.id)
+    if (!b || b.kind === 'maintenance') return { ok: false, error: 'This period was not found.' }
+    const before = { from: b.from, to: b.to, note: b.note }
+    Object.assign(b, { from: x.from, to: x.to, note: x.note.trim() })
+    return { ok: true, id: x.id, before }
+  }
+  const n = Math.max(0, ...owner.blocks.map((b) => Number(b.id?.split('-').pop()) || 0)) + 1
+  const id = `${owner.id}-${n}`
+  owner.blocks.push({ id, from: x.from, to: x.to, kind, note: x.note.trim() })
+  return { ok: true, id }
+}
+
+const VAN_FIELDS: Partial<Record<keyof Vehicle, string>> = { name: 'Name', model: 'Model', plate: 'Plate', seats: 'Seats', categoryId: 'Type', color: 'Color', odometer: 'Odometer', condition: 'Condition', photo: 'Photo' }
+const DRIVER_FIELDS: Partial<Record<keyof Driver, string>> = { name: 'Name', mobile: 'Mobile', email: 'Email', base: 'Address or base', license: 'License no.', licenseExpiry: 'License expiry', since: 'Driving since', photo: 'Photo' }
+const MAINTENANCE_FIELDS: Partial<Record<keyof MaintenanceRecord, string>> = { vehicleId: 'Van', type: 'Work', from: 'Start', to: 'End', provider: 'Provider', cost: 'Cost', note: 'Notes' }
 
 export function packageUsage(d: Dataset, serviceId: string) {
   const deps = d.departures.filter((x) => x.serviceId === serviceId)
