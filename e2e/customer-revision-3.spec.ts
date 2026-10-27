@@ -1,6 +1,6 @@
 import { expect, signInSample, test } from './fixtures'
 
-// Planner Replace flow, drafts that survive logging in, and "Mga trip na bagay sa'yo" on Home.
+// Planner Replace flow, drafts that survive logging in, and personal rows first on Home.
 
 const SHOTS = process.env.SHOTS_DIR
 
@@ -57,14 +57,21 @@ test('replace a stop with a preview, keep a draft through login, then resume and
   await expect(page.getByText('No saved drafts')).toBeVisible()
 })
 
-test('Home shows trips picked for you right under the hero, with why and a link to preferences', async ({ page }) => {
+test('Home starts with Saan tayo next for guests, and with your own rows once preferences are set', async ({ page }) => {
   await page.goto('/app')
-  const section = page.getByRole('region', { name: 'Mga trip na bagay sa’yo' })
-  await expect(section).toBeVisible()
-  await expect(section.getByText(/Trips leaving soon with seats left/)).toBeVisible()
-  await expect(section.getByRole('link', { name: 'Set preferences' })).toBeVisible()
-  // It comes before every other section on the page.
-  const first = await page.locator('main section h2').first().textContent()
-  expect(first).toContain('Mga trip na bagay sa’yo')
+  expect(await page.locator('main section h2').first().textContent()).toContain('Saan tayo next?')
+  await page.goto('/app/login')
+  await signInSample(page, 'Maria Santos')
+  await expect(page.getByText('Hello, Maria')).toBeVisible()
+  await page.goto('/app/preferences')
+  const adventure = page.getByRole('button', { name: 'Adventure', exact: true })
+  await expect(adventure).toBeVisible()
+  if ((await adventure.getAttribute('aria-pressed')) !== 'true') await adventure.click()
+  await page.getByLabel('Budget per person (₱)').fill('2000')
+  await page.getByRole('button', { name: 'Save preferences' }).click()
+  await page.goto('/app')
+  const first = page.locator('main section h2').first()
+  await expect(first).toContainText(/Because you like adventure|Within your ₱2,000 budget/)
+  await expect(page.getByRole('link', { name: 'Edit preferences' })).toBeVisible()
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/home-for-you.png`, fullPage: true })
 })

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { draftProblems, type PlannerDraft } from '../domain/drafts'
 import { setStatus } from '../domain/packages'
 import { buildPlan, replaceStop, replaceWithCustom, sampleAnswers, toggleLock } from '../domain/planner/engine'
-import { personalPicks, type RecContext } from '../domain/recommend'
+import { recommendationRows, type RecContext } from '../domain/recommend'
 import { customerFixture as customerSeed, loadFixture } from './fixtures'
 import { DEMO_CUSTOMER, useCustomer } from '../state/customerStore'
 import { resetAll } from '../state/demo'
@@ -71,23 +71,17 @@ describe('replacing a planner stop', () => {
   })
 })
 
-describe('trips picked for you', () => {
-  const ctx = (patch: Partial<RecContext> = {}): RecContext => ({ customerId: null, saved: [], viewed: [], dismissed: [], ...patch })
+describe('home rows from preferences', () => {
+  const ctx = (patch: Partial<RecContext> = {}): RecContext => ({ customerId: 'CUS-X', saved: [], viewed: [], dismissed: [], ...patch })
 
-  it('shows only active tours, and explains why', () => {
+  it('preferences give budget and interest rows from active tours only', () => {
     const d = customerSeed()
-    const first = personalPicks(d, ctx())
-    expect(first.items.length).toBeGreaterThan(0)
-    expect(first.personal).toBe(false)
-    setStatus(d.services.find((s) => s.id === first.items[0].id)!, 'Inactive')
-    const after = personalPicks(d, ctx())
-    expect(after.items.map((i) => i.id)).not.toContain(first.items[0].id)
-  })
-
-  it('follows preferences when they are set', () => {
-    const d = customerSeed()
-    const p = personalPicks(d, ctx({ prefs: { interests: ['Beach'], budgetMax: 0, duration: 'Any', style: 'Any' } as never }))
-    expect(p.personal).toBe(true)
-    expect(p.basis).toMatch(/you like beach/)
+    const prefs = { interests: ['Adventure'], budgetMax: 2000, duration: 'Any', style: 'Any' } as never
+    const rows = recommendationRows(d, ctx({ prefs }))
+    const budget = rows.find((r) => r.id === 'budget')!
+    expect(budget.title).toBe('Within your ₱2,000 budget')
+    setStatus(d.services.find((s) => s.id === budget.items[0].id)!, 'Inactive')
+    const after = recommendationRows(d, ctx({ prefs })).flatMap((r) => r.items.map((i) => i.id))
+    expect(after).not.toContain(budget.items[0].id)
   })
 })

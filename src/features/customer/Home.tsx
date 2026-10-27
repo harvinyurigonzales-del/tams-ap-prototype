@@ -2,7 +2,7 @@ import { ArrowUpRight, CalendarDays, ChevronRight, CircleDollarSign, MapPin, Mes
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { availableMoods, departureInWindow } from '../../domain/moods'
-import { catalogTours, personalPicks, recommendationRows, type PersonalPicks, type RecItem, type RecRow } from '../../domain/recommend'
+import { catalogTours, recommendationRows, type RecItem, type RecRow } from '../../domain/recommend'
 import { priceUnitOf } from '../../domain/packages'
 import { proposalExpired } from '../../domain/requests'
 import { DOWN_PAYMENT_RATE, money, payableOptions, promoFor } from '../../domain/rules'
@@ -28,6 +28,8 @@ const FADE_MS = 1100
 const FADE_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
 /** The destination given the large storytelling feature: a real photo and a scheduled joiner tour. */
 const SPOTLIGHT_DESTINATION = 'DST-BAGUIO'
+/** Rows that come from the customer's own preferences, saved and viewed trips, and past trips. */
+const PERSONAL_ROWS = ['continue', 'history', 'interests', 'budget']
 
 const tours = (d: Dataset) => catalogTours(d)
 
@@ -37,9 +39,11 @@ export function Home() {
   const toast = useUi((s) => s.toast)
   const mine = myRecords(data, customerId)
   const ctx = { customerId, prefs: mine.prefs, saved: mine.saved, viewed, dismissed }
-  const picks = personalPicks(data, ctx)
-  // The rows further down skip what the picks already show.
-  const rows = recommendationRows(data, { ...ctx, dismissed: [...dismissed, ...picks.items.map((i) => `${i.kind}:${i.id}`)] })
+  const rows = recommendationRows(data, ctx)
+  const hasPrefs = !!mine.prefs && (mine.prefs.interests.length > 0 || mine.prefs.budgetMax > 0 || mine.prefs.duration !== 'Any' || mine.prefs.style !== 'Any')
+  // Signed in, the rows built from the customer's own preferences and trips come first. Guests start with the featured tours.
+  const mineFirst = customerId ? rows.filter((r) => PERSONAL_ROWS.includes(r.id)) : []
+  const rest = rows.filter((r) => !mineFirst.includes(r))
 
   const notInterested = (i: RecItem, name: string) => {
     dismiss(i.kind, i.id)
@@ -54,8 +58,19 @@ export function Home() {
       </div>
 
       <div className="mx-auto max-w-[1180px] px-4 sm:px-6">
-        <ForYou picks={picks} loggedIn={!!customerId} onDismiss={notInterested} />
         {customerId && <NeedsAttention />}
+        {customerId && !hasPrefs && (
+          <div className="mt-12 flex flex-wrap items-center gap-3 rounded-[22px] bg-brand-50 px-5 py-4">
+            <Sparkles className="size-5 text-brand-700" aria-hidden />
+            <p className="flex-1 text-sm text-brand-900">Tell us what you like and your own picks will show here first.</p>
+            <Link to="/app/preferences" className="text-sm font-semibold text-brand-700 hover:underline">
+              Set travel preferences
+            </Link>
+          </div>
+        )}
+        {mineFirst.map((row, i) => (
+          <RecCarousel key={row.id} row={row} onDismiss={notInterested} first={i === 0} />
+        ))}
         <Featured />
         <Moods />
       </div>
@@ -65,7 +80,7 @@ export function Home() {
       <div className="mx-auto max-w-[1180px] px-4 sm:px-6">
         <Reassurance />
 
-        {rows.map((row) => (
+        {rest.map((row) => (
           <RecCarousel key={row.id} row={row} onDismiss={notInterested} />
         ))}
 
@@ -590,57 +605,20 @@ function NeedsAttention() {
 
 /* ------------------------------------------------------------------ Recommendation rows */
 
-/** "Mga trip na bagay sa'yo": the best-fitting active tours, right under the hero, with why they were picked. */
-function ForYou({ picks, loggedIn, onDismiss }: { picks: PersonalPicks; loggedIn: boolean; onDismiss: (i: RecItem, name: string) => void }) {
+function RecCarousel({ row, onDismiss, first }: { row: RecRow; onDismiss: (i: RecItem, name: string) => void; first?: boolean }) {
   const data = useCustomer((s) => s.data)
-  if (picks.items.length === 0) return null
-  const prefsLink = loggedIn ? '/app/preferences' : `/app/login?next=${encodeURIComponent('/app/preferences')}`
   return (
-    <section className="mt-12 md:mt-16" aria-labelledby="for-you">
+    <section className={first ? 'mt-12 md:mt-16' : 'mt-16'} aria-labelledby={`row-${row.id}`}>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
-        <div className="min-w-0">
-          <h2 id="for-you" className="type-head text-[26px] text-charcoal md:text-[30px]">
-            Mga trip na bagay sa’yo
-          </h2>
-          <p className="mt-1 flex items-start gap-1.5 text-sm text-ink-2">
-            <Sparkles className="mt-0.5 size-4 shrink-0 text-brand-600" aria-hidden />
-            {picks.basis}
-          </p>
-        </div>
-        <Link to={prefsLink} className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-700 hover:underline">
-          <SlidersHorizontal className="size-4" aria-hidden /> {picks.personal ? 'Edit preferences' : 'Set preferences'}
-        </Link>
+        <h2 id={`row-${row.id}`} className="type-head text-[26px] text-charcoal md:text-[30px]">
+          {row.title}
+        </h2>
+        {first && (
+          <Link to="/app/preferences" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-700 hover:underline">
+            <SlidersHorizontal className="size-4" aria-hidden /> Edit preferences
+          </Link>
+        )}
       </div>
-      <LoopCarousel
-        label="Trips picked for you"
-        items={picks.items}
-        itemKey={(i) => `${i.kind}:${i.id}`}
-        renderItem={(i) => {
-          const s = data.services.find((x) => x.id === i.id)!
-          return (
-            <TourCard
-              service={s}
-              reason={i.reason}
-              footer={
-                <button onClick={() => onDismiss(i, s.name)} className="inline-flex items-center gap-1 text-xs font-medium text-ink-3 hover:text-ink">
-                  <X className="size-3.5" aria-hidden /> Not interested
-                </button>
-              }
-            />
-          )
-        }}
-      />
-    </section>
-  )
-}
-
-function RecCarousel({ row, onDismiss }: { row: RecRow; onDismiss: (i: RecItem, name: string) => void }) {
-  const data = useCustomer((s) => s.data)
-  return (
-    <section className="mt-16" aria-labelledby={`row-${row.id}`}>
-      <h2 id={`row-${row.id}`} className="mb-4 type-head text-[26px] text-charcoal md:text-[30px]">
-        {row.title}
-      </h2>
       <LoopCarousel
         label={row.title}
         items={row.items}
