@@ -20,15 +20,17 @@ import { EmptyState } from '../../ui/EmptyState'
 import { Picture } from '../../ui/Picture'
 import { Stars } from '../../ui/Stars'
 import { bookingTitle } from './Book'
+import { DraftList } from './Drafts'
 import { BackLink } from './Explore'
 import { AskAboutButton, SimulateBooking, RequestStatusBadge } from './Requests'
 import { bookingSteps, Stepper } from './Timeline'
 
-type Tab = 'bookings' | 'custom' | 'rental'
+type Tab = 'bookings' | 'custom' | 'rental' | 'drafts'
 const TABS: { key: Tab; label: string }[] = [
   { key: 'bookings', label: 'Bookings' },
   { key: 'custom', label: 'Custom requests' },
   { key: 'rental', label: 'Van rental requests' },
+  { key: 'drafts', label: 'Drafts' },
 ]
 type Group = 'Upcoming' | 'Completed trips' | 'Past' | 'Cancelled'
 const groupOf = (b: Booking): Group =>
@@ -49,7 +51,8 @@ export function Trips() {
   const [params, setParams] = useSearchParams()
   const tab = (TABS.some((t) => t.key === params.get('tab')) ? params.get('tab') : 'bookings') as Tab
   const mine = myRecords(data, customerId)
-  const counts: Record<Tab, number> = { bookings: mine.bookings.length, custom: mine.customRequests.length, rental: mine.rentalRequests.length }
+  const drafts = data.drafts.filter((d) => d.customerId === customerId)
+  const counts: Record<Tab, number> = { bookings: mine.bookings.length, custom: mine.customRequests.length, rental: mine.rentalRequests.length, drafts: drafts.length }
 
   return (
     <div>
@@ -60,6 +63,8 @@ export function Trips() {
             key={t.key}
             role="tab"
             aria-selected={tab === t.key}
+            // A tab opened by link (such as Drafts) may sit past the edge of a phone screen.
+            ref={tab === t.key ? (el) => el?.scrollIntoView({ block: 'nearest', inline: 'nearest' }) : undefined}
             onClick={() => setParams(t.key === 'bookings' ? {} : { tab: t.key }, { replace: true })}
             className={`h-9 shrink-0 rounded-lg px-3.5 text-sm font-semibold whitespace-nowrap ${tab === t.key ? 'bg-surface text-brand-700 shadow-card' : 'text-ink-2'}`}
           >
@@ -69,6 +74,7 @@ export function Trips() {
       </div>
       <div key={tab} className="fade-in mt-5" role="tabpanel">
         {tab === 'bookings' && <BookingList bookings={mine.bookings} />}
+        {tab === 'drafts' && <DraftList drafts={drafts} />}
         {tab === 'custom' && (
           <RequestList
             empty={<EmptyState icon={<PencilRuler className="size-6" aria-hidden />} title="No custom trip requests" body="Tell us where you want to go and staff will send a proposal." action={<LinkButton to="/app/custom/new">Plan a custom trip</LinkButton>} />}

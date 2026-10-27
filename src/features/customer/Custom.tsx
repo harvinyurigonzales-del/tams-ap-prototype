@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowUp, CalendarDays, Compass, Info, MapPin, Minus, Plus, Route, Sparkles, Trash2, Users } from 'lucide-react'
+import { SaveDraftButton } from './Drafts'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { areaOfCity, destinationOptions, joinPickup, landmarkOptions, pickupCityOptions, stopOptions } from '../../domain/places'
@@ -292,6 +293,7 @@ export function CustomRequestForm() {
             <Button size="lg" full onClick={submit}>
               {me ? 'Send request' : 'Log in to send request'}
             </Button>
+            <SaveDraftButton kind="custom" title={`${hasPlace ? place.name : 'Custom'} trip request`} destination={hasPlace ? place.name : ''} payload={f} />
             <p className="text-center text-xs text-ink-2">{me ? 'Sending does not reserve anything. Staff reply with a proposal you can accept or change.' : 'Your answers stay on this page while you log in.'}</p>
           </Card>
         </div>

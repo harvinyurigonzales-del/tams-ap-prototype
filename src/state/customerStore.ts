@@ -18,6 +18,7 @@ import type {
   RentalTripType, RequestStatus, Review, SavedItem, TravelPreferences, TripPace,
 } from '../seed/types'
 import { nextId } from './ids'
+import { sameDraft, type DraftInput } from '../domain/drafts'
 import { freshState, markSignedOut, readSession, startingState, writeSession, type CustomerAccount } from './persist'
 import { budgetOf, firstInvalid, pickupLabel, requestDates, toPlannedTrip, type PlannerAnswers, type TripPlan } from '../domain/planner/engine'
 
@@ -144,6 +145,13 @@ interface CustomerState {
   // Requests
   drafts: { custom?: CustomForm; rental?: RentalForm }
   saveDraft: (kind: 'custom' | 'rental', form: CustomForm | RentalForm | undefined) => void
+  /** A draft saved while logged out. Kept in this tab and added to My Trips after logging in. */
+  pendingDraft: DraftInput | null
+  /** Saves (or updates, with an id) a trip draft; a guest's draft waits for login. */
+  saveTripDraft: (input: DraftInput) => Result<{ id: string | null; guest: boolean }>
+  deleteTripDraft: (id: string) => Result
+  /** Removes the draft a sent request came from, found by id or key. */
+  dropDraft: (match: { id?: string; key?: string }) => void
   submitCustom: (f: CustomForm) => Result<CustomRequest>
   /** Sends a plan from the AI planner into the custom-request workflow. */
   submitPlannedTrip: (input: PlannedTripInput) => Result<CustomRequest>
@@ -179,6 +187,25 @@ const sessionState = () => ({
   checklist: {} as Record<string, string[]>,
 })
 
+const GUEST_DRAFT = 'tams-guest-draft'
+
+/** A guest's draft lives in this browser tab until they log in. */
+function readGuestDraft(): DraftInput | null {
+  try {
+    return JSON.parse(sessionStorage.getItem(GUEST_DRAFT) ?? 'null') as DraftInput | null
+  } catch {
+    return null
+  }
+}
+function writeGuestDraft(d: DraftInput | null) {
+  try {
+    if (d) sessionStorage.setItem(GUEST_DRAFT, JSON.stringify(d))
+    else sessionStorage.removeItem(GUEST_DRAFT)
+  } catch {
+    // Storage can be blocked; the draft still waits in memory for this page view.
+  }
+}
+
 const SEED_ACCOUNTS: Account[] = [
   { ...DEMO_CUSTOMER, customerId: 'CUS-0001' },
   { ...NEW_CUSTOMER, customerId: 'CUS-0011' },
@@ -193,6 +220,7 @@ const initial = (fresh = false) => {
     accounts,
     customerId: id && accounts.some((a) => a.customerId === id) ? id : null,
   pendingSave: null as SavedItem | null,
+    pendingDraft: fresh ? null : readGuestDraft(),
     drafts: {} as { custom?: CustomForm; rental?: RentalForm },
     ...sessionState(),
   }
@@ -265,8 +293,16 @@ export const useCustomer = create<CustomerState>((set, get) => ({
       const list = data.saved[customerId] ?? []
       if (!list.some((x) => sameItem(x, s.pendingSave!))) applySave(data, customerId, s.pendingSave)
     }
+    // A draft saved as a guest joins this account's drafts, once.
+    const pd = s.pendingDraft
+    if (pd) {
+      const same = data.drafts.find((x) => x.customerId === customerId && sameDraft(x, pd))
+      if (same) Object.assign(same, { title: pd.title, destination: pd.destination, payload: structuredClone(pd.payload), updatedAt: demoNowStamp() })
+      else data.drafts.unshift({ id: nextId(data, 'draft'), customerId, kind: pd.kind, key: pd.key, title: pd.title, destination: pd.destination, payload: structuredClone(pd.payload), updatedAt: demoNowStamp() })
+    }
+    writeGuestDraft(null)
     // Guest views and the guest's chat carry over so "Continue planning" still makes sense right after logging in.
-    set({ data, customerId, pendingSave: null, ...sessionState(), viewed: s.customerId ? [] : s.viewed, chat: s.customerId ? [] : s.chat })
+    set({ data, customerId, pendingSave: null, pendingDraft: null, ...sessionState(), viewed: s.customerId ? [] : s.viewed, chat: s.customerId ? [] : s.chat })
     writeSession({ customerId })
   },
 
@@ -446,6 +482,43 @@ export const useCustomer = create<CustomerState>((set, get) => ({
 
   saveDraft: (kind, form) => set({ drafts: { ...get().drafts, [kind]: form } }),
 
+  saveTripDraft: (x) => {
+    const s = get()
+    if (!x.title.trim()) return fail('Give the draft a name.')
+    if (!s.customerId) {
+      const pd = { ...x, id: undefined, payload: structuredClone(x.payload) }
+      writeGuestDraft(pd)
+      set({ pendingDraft: pd })
+      return ok({ id: null, guest: true })
+    }
+    const data = structuredClone(s.data)
+    const at = demoNowStamp()
+    const mine = data.drafts.find((d) => d.customerId === s.customerId && ((x.id && d.id === x.id) || (x.key && d.kind === x.kind && d.key === x.key)))
+    if (mine) Object.assign(mine, { title: x.title, destination: x.destination, payload: structuredClone(x.payload), updatedAt: at })
+    else data.drafts.unshift({ id: nextId(data, 'draft'), customerId: s.customerId, kind: x.kind, key: x.key, title: x.title, destination: x.destination, payload: structuredClone(x.payload), updatedAt: at })
+    const id = mine ? mine.id : data.drafts[0].id
+    // The most recently saved draft comes first.
+    data.drafts = [data.drafts.find((d) => d.id === id)!, ...data.drafts.filter((d) => d.id !== id)]
+    set({ data })
+    return ok({ id, guest: false })
+  },
+
+  dropDraft: ({ id, key }) => {
+    const s = get()
+    const gone = (d: Dataset['drafts'][number]) => d.customerId === s.customerId && ((!!id && d.id === id) || (!!key && d.key === key))
+    if (!s.data.drafts.some(gone)) return
+    set({ data: { ...s.data, drafts: s.data.drafts.filter((d) => !gone(d)) } })
+  },
+
+  deleteTripDraft: (id) => {
+    const s = get()
+    if (!s.data.drafts.some((d) => d.id === id && d.customerId === s.customerId)) return fail('This draft was not found.')
+    const data = structuredClone(s.data)
+    data.drafts = data.drafts.filter((d) => d.id !== id)
+    set({ data })
+    return ok(undefined)
+  },
+
   submitCustom: (f) => {
     const s = get()
     if (!s.customerId) return fail('Please log in to send your request.')
@@ -464,6 +537,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     data.customRequests.push(r)
     notify(data, s.customerId, { at, category: 'Requests', title: 'Custom trip request sent', body: `${r.id} · ${dest.name}. We’ll let you know when your proposal is ready.`, link: `/app/custom/${r.id}` })
     alertStaff(data, s.customerId, { at, category: 'Requests', title: 'New custom trip request', body: `${r.id} (${nameOf(data, s.customerId)}) · ${dest.name}, ${r.groupSize} pax.`, link: `/admin/requests?id=${r.id}` })
+    data.drafts = data.drafts.filter((d) => !(d.customerId === s.customerId && d.key === 'custom-form'))
     set({ data, drafts: { ...s.drafts, custom: undefined } })
     return ok(r)
   },
@@ -520,6 +594,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
     data.rentalRequests.push(r)
     notify(data, s.customerId, { at, category: 'Requests', title: 'Van rental request sent', body: `${r.id} · ${cat.name} to ${r.dropoff}. A request does not reserve a van yet.`, link: `/app/rentals/${r.id}` })
     alertStaff(data, s.customerId, { at, category: 'Requests', title: 'New van rental request', body: `${r.id} (${nameOf(data, s.customerId)}) · ${cat.name} to ${r.dropoff}.`, link: `/admin/requests?id=${r.id}` })
+    data.drafts = data.drafts.filter((d) => !(d.customerId === s.customerId && d.key === 'rental-form'))
     set({ data, drafts: { ...s.drafts, rental: undefined } })
     return ok(r)
   },
@@ -838,6 +913,7 @@ export const useCustomer = create<CustomerState>((set, get) => ({
 
   reset: () => {
     writeSession({ customerId: null })
+    writeGuestDraft(null)
     set(initial(true))
   },
 }))

@@ -576,6 +576,8 @@ export interface TripDraft {
   id: string
   customerId: string
   kind: 'planner' | 'custom' | 'rental'
+  /** Identifies the plan or form across saves, so saving again (or logging in) updates one draft. */
+  key?: string
   title: string
   destination: string
   updatedAt: string

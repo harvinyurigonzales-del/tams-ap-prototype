@@ -25,7 +25,8 @@ export function Review() {
   const data = useCustomer((s) => s.data)
   const submit = useCustomer((s) => s.submitPlannedTrip)
   const toast = useUi((s) => s.toast)
-  const { plan, answers: a, go, kept, clear } = usePlanner()
+  const { plan, answers: a, go, kept, clear, draftId, draftKey } = usePlanner()
+  const dropDraft = useCustomer((s) => s.dropDraft)
   const [name, setName] = useState(me?.name ?? '')
   const [mobile, setMobile] = useState(me?.mobile ?? '')
   const [error, setError] = useState('')
@@ -53,6 +54,8 @@ export function Review() {
     const r = submit({ answers: a, plan, contactName: name || me.name, contactMobile: mobile || me.mobile })
     setBusy(false)
     if (!r.ok) return setError(r.error)
+    // The plan was sent, so its saved draft is no longer needed.
+    dropDraft({ id: draftId ?? undefined, key: draftKey })
     clear()
     toast('Trip request sent. TAMS-AP will review your plan and prepare a proposal.')
     navigate(`/app/custom/${r.value.id}`, { replace: true })

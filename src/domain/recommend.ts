@@ -196,3 +196,62 @@ export function recommendationRows(d: Dataset, ctx: RecContext, today = DEMO_TOD
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const shortDay = (s: string) => `${MON[+s.slice(5, 7) - 1]} ${+s.slice(8, 10)}`
+
+export interface PersonalPicks {
+  /** Active tours with an open date only, best match first. */
+  items: RecItem[]
+  /** Why these trips, in one sentence. */
+  basis: string
+  /** True when the picks follow the customer's own preferences or trips, not just what leaves soon. */
+  personal: boolean
+}
+
+/**
+ * "Mga trip na bagay sa'yo": the tours that fit this customer best, shown first on Home. Preferences decide when
+ * they are set; otherwise saved and viewed trips and the last completed trip; otherwise what is leaving soon.
+ */
+export function personalPicks(d: Dataset, ctx: RecContext, today = DEMO_TODAY): PersonalPicks {
+  const hidden = new Set(ctx.dismissed)
+  const open = catalogTours(d).filter((s) => !!bookableDeparture(d, s.id, today) && !hidden.has(recKey('tour', s.id)))
+  const prefs = ctx.prefs
+  const hasPrefs = !!prefs && (prefs.interests.length > 0 || prefs.budgetMax > 0 || prefs.duration !== 'Any' || prefs.style !== 'Any')
+  if (prefs && hasPrefs) {
+    const items = open
+      .map((s) => ({ id: s.id, sc: scoreTour(d, s, prefs, today) }))
+      .map((x) => ({ ...x, s: x.sc.score }))
+      .filter((x) => x.sc.matched.length > 0 || x.sc.withinBudget || x.sc.durationMatch)
+      .sort(stable)
+      .slice(0, MAX_PER_ROW)
+      .map<RecItem>((x) => ({ kind: 'tour', id: x.id, reason: tourReason(x.sc, prefs) }))
+    const parts = [
+      prefs.interests.length ? `you like ${listAnd(prefs.interests.slice(0, 3).map((i) => i.toLowerCase()))}` : '',
+      prefs.budgetMax > 0 ? `your budget is up to ${peso(prefs.budgetMax)} per person` : '',
+      prefs.duration !== 'Any' ? `you prefer ${prefs.duration.toLowerCase().replace(/ \(.*\)/, '')} trips` : '',
+    ].filter(Boolean)
+    if (items.length) return { items, basis: `Picked because ${listAnd(parts)}.`, personal: true }
+  }
+  // Interests of what the customer saved, viewed or travelled on.
+  const signals = [
+    ...ctx.saved.filter((s) => s.kind === 'tour').map((s) => s.id),
+    ...ctx.viewed.filter((k) => k.startsWith('tour:')).map((k) => k.slice(5)),
+    ...d.bookings.filter((b) => ctx.customerId && b.customerId === ctx.customerId && b.status === 'Completed').map((b) => b.serviceId),
+  ]
+  const liked = new Set(signals.flatMap((id) => d.services.find((s) => s.id === id)?.interests ?? []))
+  if (liked.size) {
+    const items = open
+      .filter((s) => !signals.includes(s.id))
+      .map((s) => ({ id: s.id, shared: (s.interests ?? []).filter((i) => liked.has(i)) }))
+      .filter((x) => x.shared.length > 0)
+      .map((x) => ({ ...x, s: x.shared.length }))
+      .sort(stable)
+      .slice(0, MAX_PER_ROW)
+      .map<RecItem>((x) => ({ kind: 'tour', id: x.id, reason: `Like trips you looked at: ${listAnd(x.shared.slice(0, 2))}` }))
+    if (items.length) return { items, basis: 'Picked from the trips you saved, viewed or took. Set your preferences to sharpen these.', personal: true }
+  }
+  const items = open
+    .map((s) => ({ s, next: bookableDeparture(d, s.id, today)! }))
+    .sort((a, b) => a.next.dep.startDate.localeCompare(b.next.dep.startDate) || a.s.id.localeCompare(b.s.id))
+    .slice(0, MAX_PER_ROW)
+    .map<RecItem>((x) => ({ kind: 'tour', id: x.s.id, reason: `Next departure ${shortDay(x.next.dep.startDate)} · ${x.next.avail.left} seats left` }))
+  return { items, basis: 'Trips leaving soon with seats left. Tell us what you like and these will follow your answers.', personal: false }
+}

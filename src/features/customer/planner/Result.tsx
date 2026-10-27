@@ -3,10 +3,11 @@ import {
   Trash2, TriangleAlert, Undo2, UtensilsCrossed, Waves, Wallet,
 } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { placeFor } from '../../../domain/planner/data'
 import {
   addAttraction, addCustomStop, alternativesFor, budgetOf, canMove, checkPlan, clock, estimate, findStop, hoursText, MAX_DAYS, moveStop, QUESTIONS, quickAction,
-  rankDestinations, removeStop, replaceStop, schedule, suggestAnother, toggleLock, tripDays, whyItFits, type CostLine, type Fix, type PlanIssue, type PlanStop,
+  rankDestinations, removeStop, replaceStop, replaceWithCustom, schedule, suggestAnother, toggleLock, tripDays, whyItFits, type CostLine, type Fix, type PlanIssue, type PlanStop,
   type QuickAction, type ScheduleItem, type TripPlan,
 } from '../../../domain/planner/engine'
 import { requestDestination } from '../../../domain/requests'
@@ -35,7 +36,9 @@ const COST_GROUPS: { id: CostLine['group']; title: string }[] = [
 export function Result() {
   const data = useCustomer((s) => s.data)
   const toast = useUi((s) => s.toast)
-  const { plan, answers: a, update, undo, history, note, setNote, go, saveDraft, shown, kept, keepIssue, setAnswers, reapply } = usePlanner()
+  const { plan, answers: a, update, undo, history, note, setNote, go, saveDraft, shown, kept, keepIssue, setAnswers, reapply, draftId, draftKey } = usePlanner()
+  const saveTripDraft = useCustomer((s) => s.saveTripDraft)
+  const navigate = useNavigate()
   const [replaceKey, setReplaceKey] = useState<string | null>(null)
   const [addDay, setAddDay] = useState<number | null>(null)
   const [nearer, setNearer] = useState(false)
@@ -106,6 +109,13 @@ export function Result() {
       }
       return act(p, `Easier stops: ${swapped.join('; ')}.`)
     }
+  }
+  const save = () => {
+    const r = saveTripDraft({ id: draftId ?? undefined, key: draftKey, kind: 'planner', title: `${dest.name}, ${days === 1 ? 'day trip' : `${days} days`}`, destination: dest.name, payload: { answers: a, plan, shown, kept } })
+    if (!r.ok) return toast(r.error, 'error')
+    saveDraft(r.value.id)
+    if (r.value.guest) toast('Draft kept in this browser tab. Log in to keep it in My Trips.', 'info', { label: 'Log in', run: () => navigate('/app/login?next=%2Fapp%2Ftrips%3Ftab%3Ddrafts') })
+    else toast('Draft saved. Find it under Drafts in My Trips.', 'success', { label: 'View drafts', run: () => navigate('/app/trips?tab=drafts') })
   }
   const editPrefs = (q = 0) => usePlanner.setState({ editing: true, step: 'questions', q })
 
@@ -247,14 +257,14 @@ export function Result() {
               <Button variant="secondary" onClick={another} icon={<RefreshCw className="size-4" aria-hidden />}>Suggest another plan</Button>
               <Button variant="secondary" onClick={() => editPrefs(0)} icon={<PencilLine className="size-4" aria-hidden />}>Edit preferences</Button>
             </div>
-            <Button full variant="ghost" onClick={() => (saveDraft(), toast('Draft saved. Open Plan a custom trip any time to continue.'))} icon={<Bookmark className="size-4" aria-hidden />}>
+            <Button full variant="ghost" onClick={save} icon={<Bookmark className="size-4" aria-hidden />}>
               Save draft
             </Button>
           </div>
           <div className="grid grid-cols-2 gap-2 lg:hidden">
             <Button variant="secondary" onClick={another} icon={<RefreshCw className="size-4" aria-hidden />}>Another plan</Button>
             <Button variant="secondary" onClick={() => editPrefs(0)} icon={<PencilLine className="size-4" aria-hidden />}>Preferences</Button>
-            <Button className="col-span-2" variant="ghost" onClick={() => (saveDraft(), toast('Draft saved. Open Plan a custom trip any time to continue.'))} icon={<Bookmark className="size-4" aria-hidden />}>
+            <Button className="col-span-2" variant="ghost" onClick={save} icon={<Bookmark className="size-4" aria-hidden />}>
               Save draft
             </Button>
           </div>
@@ -272,7 +282,7 @@ export function Result() {
         </div>
       </div>
 
-      <ReplaceDialog stopKey={replaceKey} onClose={() => setReplaceKey(null)} onPick={(key, id, name) => (act(replaceStop(plan, key, id), `Replaced with ${name}.`), setReplaceKey(null))} />
+      <ReplaceDialog stopKey={replaceKey} onClose={() => setReplaceKey(null)} onDone={(p, msg) => (act(p, msg), toast(msg, 'success', { label: 'Undo', run: undo }))} />
       <AddStopDialog day={addDay} onClose={() => setAddDay(null)} onAdd={(p, msg) => (act(p, msg), setAddDay(null))} />
       <NearerDialog
         open={nearer}
@@ -459,33 +469,111 @@ export function CostLines({ lines }: { lines: CostLine[] }) {
   )
 }
 
-function ReplaceDialog({ stopKey, onClose, onPick }: { stopKey: string | null; onClose: () => void; onPick: (key: string, id: string, name: string) => void }) {
+/**
+ * Replace one stop: search the places we know here, preview what changes, then confirm. A kept stop asks to be
+ * unlocked first. Places already in the plan are not offered, and when nothing fits the customer can name their own.
+ */
+function ReplaceDialog({ stopKey, onClose, onDone }: { stopKey: string | null; onClose: () => void; onDone: (p: TripPlan, msg: string) => void }) {
   const { plan, answers } = usePlanner()
+  const [q, setQ] = useState('')
+  const [pick, setPick] = useState<string | null>(null)
+  const [own, setOwn] = useState('')
+  const [err, setErr] = useState('')
   const current = plan && stopKey ? findStop(plan, stopKey)?.stop : undefined
-  const alts = plan && stopKey ? alternativesFor(plan, answers, stopKey) : []
+  const close = () => (setQ(''), setPick(null), setOwn(''), setErr(''), onClose())
+  if (!plan || !stopKey || !current) return null
+  const alts = alternativesFor(plan, answers, stopKey)
+  const needle = q.trim().toLowerCase()
+  const shown = alts.filter((x) => !needle || `${x.attraction.name} ${x.attraction.tags.join(' ')}`.toLowerCase().includes(needle))
+  const chosen = alts.find((x) => x.attraction.id === pick)
+  const perPerson = (p: TripPlan) => estimate(p, answers).perPerson
+  const swap = () => {
+    if (current.locked) return
+    if (chosen) return (onDone(replaceStop(plan, stopKey, chosen.attraction.id), `Replaced ${current.name} with ${chosen.attraction.name}.`), close())
+  }
+  const custom = () => {
+    if (own.trim().length < 3) return setErr('Type the name of the place.')
+    onDone(replaceWithCustom(plan, stopKey, own), `Replaced ${current.name} with ${own.trim()}. Staff will check its timing and fees.`)
+    close()
+  }
+  const ownForm = (
+    <form className="mt-4 space-y-2" onSubmit={(e) => (e.preventDefault(), custom())}>
+      <TextField label="Or name a place you want instead" value={own} onChange={(e) => (setOwn(e.target.value), setErr(''))} placeholder="e.g. a cafe or a relative’s house" error={err} hint="We don’t have data for places you name, so staff check them." />
+      <Button type="submit" variant="secondary" size="sm">Use my own stop</Button>
+    </form>
+  )
   return (
-    <Dialog open={!!stopKey} onClose={onClose} title={current ? `Replace ${current.name}` : 'Replace stop'} wide>
-      {alts.length === 0 ? (
-        <p>Every stop we know here is already in your plan. Add your own stop instead, and staff will check it.</p>
+    <Dialog open onClose={close} title={`Replace ${current.name}`} wide>
+      {current.locked ? (
+        <div className="space-y-3">
+          <p className="flex items-start gap-2 rounded-xl bg-brand-50 px-3 py-2.5 text-ink">
+            <Lock className="mt-0.5 size-4 shrink-0 text-brand-700" aria-hidden /> You chose to keep {current.name}. Unlock it to choose a replacement.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" icon={<LockOpen className="size-4" aria-hidden />} onClick={() => onDone(toggleLock(plan, stopKey), `${current.name} can change again.`)}>
+              Unlock and choose a replacement
+            </Button>
+            <Button size="sm" variant="ghost" onClick={close}>Keep it</Button>
+          </div>
+        </div>
+      ) : chosen ? (
+        <div className="space-y-3">
+          <p className="text-xs font-semibold tracking-wide text-ink-3 uppercase">Preview</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {[
+              { label: 'Now', name: current.name, minutes: current.minutes, fee: current.fee, effort: current.effort, note: current.confirm },
+              { label: 'Instead', name: chosen.attraction.name, minutes: chosen.attraction.minutes, fee: chosen.attraction.fee, effort: chosen.attraction.effort, note: chosen.attraction.confirm },
+            ].map((x) => (
+              <div key={x.label} className={`rounded-xl border p-3 ${x.label === 'Instead' ? 'border-brand-300 bg-brand-50/60' : 'border-line'}`}>
+                <p className="text-xs text-ink-3">{x.label}</p>
+                <p className="font-semibold text-ink">{x.name}</p>
+                <p className="mt-1 text-xs text-ink-2">
+                  {hoursText(x.minutes)} · {x.fee === null ? 'Fee to confirm' : x.fee ? `${peso(x.fee)} per person` : 'Free'} · {x.effort} effort
+                  {x.note && ` · ${x.note}`}
+                </p>
+              </div>
+            ))}
+          </div>
+          <p className="text-ink">
+            Estimated cost per person: {peso(perPerson(plan))} → <span className="font-semibold">{peso(perPerson(replaceStop(plan, stopKey, chosen.attraction.id)))}</span>
+            {chosen.matches.length > 0 && <span className="text-ink-2"> · Matches {chosen.matches.join(', ').toLowerCase()}</span>}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={swap}>Confirm replacement</Button>
+            <Button size="sm" variant="ghost" onClick={() => setPick(null)}>Back to the list</Button>
+          </div>
+        </div>
       ) : (
-        <ul className="space-y-2">
-          {alts.map((x) => (
-            <li key={x.attraction.id}>
-              <button type="button" onClick={() => onPick(stopKey!, x.attraction.id, x.attraction.name)} className="w-full rounded-xl border border-line p-3 text-left transition-colors hover:border-brand-300 hover:bg-brand-50">
-                <span className="flex items-baseline justify-between gap-3">
-                  <span className="font-semibold text-ink">{x.attraction.name}</span>
-                  {x.matches.length > 0 && <Badge tone="ok">Matches {x.matches.join(', ').toLowerCase()}</Badge>}
-                </span>
-                <span className="mt-1 block text-xs text-ink-2">
-                  {hoursText(x.attraction.minutes)} ({x.minutesDelta === 0 ? 'same time' : x.minutesDelta > 0 ? `${hoursText(x.minutesDelta)} longer` : `${hoursText(-x.minutesDelta)} shorter`}) ·{' '}
-                  {x.feeDelta === 0 ? 'same cost' : x.feeDelta > 0 ? `${peso(x.feeDelta)} more per person` : `${peso(-x.feeDelta)} less per person`}
-                  {x.attraction.effort !== 'easy' && ` · ${x.attraction.effort} effort`}
-                  {x.attraction.confirm && ` · ${x.attraction.confirm}`}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <>
+          {alts.length > 0 && (
+            <TextField label="Search places" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or interest, e.g. beach" />
+          )}
+          {shown.length === 0 ? (
+            <p className="mt-3 rounded-xl bg-surface-muted px-3 py-3 text-ink">
+              {alts.length === 0 ? 'Every place we know here is already in your plan.' : `No places match “${q.trim()}”.`} You can name your own stop, and staff will check it.
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {shown.map((x) => (
+                <li key={x.attraction.id}>
+                  <button type="button" onClick={() => setPick(x.attraction.id)} className="w-full rounded-xl border border-line p-3 text-left transition-colors hover:border-brand-300 hover:bg-brand-50">
+                    <span className="flex items-baseline justify-between gap-3">
+                      <span className="font-semibold text-ink">{x.attraction.name}</span>
+                      {x.matches.length > 0 && <Badge tone="ok">Matches {x.matches.join(', ').toLowerCase()}</Badge>}
+                    </span>
+                    <span className="mt-1 block text-xs text-ink-2">
+                      {hoursText(x.attraction.minutes)} ({x.minutesDelta === 0 ? 'same time' : x.minutesDelta > 0 ? `${hoursText(x.minutesDelta)} longer` : `${hoursText(-x.minutesDelta)} shorter`}) ·{' '}
+                      {x.feeDelta === 0 ? 'same cost' : x.feeDelta > 0 ? `${peso(x.feeDelta)} more per person` : `${peso(-x.feeDelta)} less per person`}
+                      {x.attraction.effort !== 'easy' && ` · ${x.attraction.effort} effort`}
+                      {x.attraction.confirm && ` · ${x.attraction.confirm}`}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {ownForm}
+        </>
       )}
     </Dialog>
   )

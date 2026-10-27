@@ -719,8 +719,15 @@ export function canMove(plan: TripPlan, key: string, dir: -1 | 1) {
 export function replaceStop(plan: TripPlan, key: string, attractionId: string): TripPlan {
   const place = placeFor(plan.destinationId)
   const x = place?.attractions.find((y) => y.id === attractionId)
-  if (!x) return plan
+  // A place already in the plan is never added a second time.
+  if (!x || plan.days.flat().some((s) => s.attractionId === x.id && s.key !== key)) return plan
   return touch(plan, plan.days.map((d) => d.map((s) => (s.key === key ? { ...toStop(x), locked: s.locked } : s))))
+}
+
+/** Swaps a stop for a place the customer names; staff check its timing and fees. */
+export function replaceWithCustom(plan: TripPlan, key: string, name: string): TripPlan {
+  if (name.trim().length < 3) return plan
+  return touch(plan, plan.days.map((d) => d.map((s) => (s.key === key ? { ...customStop(name), locked: s.locked } : s))))
 }
 
 export function addAttraction(plan: TripPlan, attractionId: string, day: number): TripPlan {

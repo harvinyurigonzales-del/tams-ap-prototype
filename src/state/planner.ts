@@ -27,6 +27,10 @@ interface PlannerState {
   /** Started from "Try a sample trip". */
   sample: boolean
   savedAt: string | null
+  /** The saved draft this plan updates (My Trips → Drafts). */
+  draftId: string | null
+  /** Stable key for this plan's draft, so saving before and after logging in keeps one draft. */
+  draftKey: string
   /** Destination the planner was opened for (from a destination page). */
   openedFor: string | null
   /** Issues the customer chose to leave for staff instead of fixing. */
@@ -45,11 +49,15 @@ interface PlannerState {
   /** Applies changed answers to an existing plan: keep the customer's stops, or start fresh (locked stops stay). */
   reapply: (catalog: Destination[], mode: 'keep' | 'replace') => void
   setNote: (note: string | null) => void
-  saveDraft: () => void
+  saveDraft: (draftId?: string | null) => void
+  /** Opens a saved draft: its answers and plan come back, with a note on anything that needs changing. */
+  resume: (draftId: string, key: string | undefined, saved: { answers: PlannerAnswers; plan: TripPlan | null; shown: string[]; kept: string[] }, note: string | null) => void
   clear: () => void
 }
 
 const HISTORY = 20
+
+const newKey = () => `plan-${Math.random().toString(36).slice(2, 10)}`
 
 export function destinationFor(a: PlannerAnswers, catalog: Destination[]): Pick<Destination, 'id' | 'name'> {
   if (a.destination.mode === 'chosen') {
@@ -62,7 +70,7 @@ export function destinationFor(a: PlannerAnswers, catalog: Destination[]): Pick<
 
 const fresh = () => ({
   step: 'intro' as PlannerStep, q: 0, answers: emptyAnswers(), plan: null as TripPlan | null, shown: [] as string[], history: [] as TripPlan[],
-  note: null as string | null, editing: false, sample: false, savedAt: null as string | null, openedFor: null as string | null, kept: [] as string[],
+  note: null as string | null, editing: false, sample: false, savedAt: null as string | null, draftId: null as string | null, draftKey: newKey(), openedFor: null as string | null, kept: [] as string[],
 })
 
 export const usePlanner = create<PlannerState>((set, get) => ({
@@ -121,6 +129,11 @@ export const usePlanner = create<PlannerState>((set, get) => ({
 
   keepIssue: (id) => set({ kept: [...new Set([...get().kept, id])] }),
   setNote: (note) => set({ note }),
-  saveDraft: () => set({ savedAt: demoNowStamp() }),
+  saveDraft: (draftId) => set({ savedAt: demoNowStamp(), ...(draftId !== undefined ? { draftId } : {}) }),
+  resume: (draftId, key, saved, note) =>
+    set({
+      ...fresh(), draftKey: key ?? newKey(), answers: structuredClone(saved.answers), plan: structuredClone(saved.plan), shown: [...saved.shown], kept: [...saved.kept], draftId, note,
+      step: saved.plan ? 'result' : 'questions',
+    }),
   clear: () => set(fresh()),
 }))

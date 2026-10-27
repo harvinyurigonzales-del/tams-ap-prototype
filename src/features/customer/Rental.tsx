@@ -1,4 +1,5 @@
 import { CalendarDays, Check, Clock, Luggage, MapPin, Plus, Trash2, Users } from 'lucide-react'
+import { SaveDraftButton } from './Drafts'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
@@ -337,6 +338,7 @@ export function RentalRequestForm() {
           <Button size="lg" full onClick={submit}>
             {me ? 'Send request' : 'Log in to send request'}
           </Button>
+          <SaveDraftButton kind="rental" title={`${cat?.name ?? 'Van'} rental${f.dropoff ? ` to ${f.dropoff}` : ''}`} destination={f.dropoff || f.destinationArea} payload={f} />
           {!me && <p className="text-center text-xs text-ink-2">Your answers stay on this page while you log in.</p>}
         </Card>
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
